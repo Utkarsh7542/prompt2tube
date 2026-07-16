@@ -1,3 +1,4 @@
+import json
 import os
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -10,6 +11,13 @@ SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 def get_service():
     creds = None
+    env_token = os.environ.get("GOOGLE_TOKEN_JSON")
+    if env_token:
+        # Server deploys (Render etc.): the whole token.json is passed as an env var.
+        creds = Credentials.from_authorized_user_info(json.loads(env_token), SCOPES)
+        if creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        return build("youtube", "v3", credentials=creds)
     if os.path.exists("token.json"):
         creds = Credentials.from_authorized_user_file("token.json", SCOPES)
     if not creds or not creds.valid:

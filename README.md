@@ -62,6 +62,16 @@ What to copy: this folder, minus `__pycache__/` and `static/jobs/`. The three cr
 - `client_secret.json`: identifies the Google Cloud project. Copy it as-is.
 - `token.json`: the YouTube channel login. Copy it too and uploads go to YOUR channel with no sign-in (simplest for a supervised demo — delete it from their machine afterwards). Leave it out and their first upload triggers a Google sign-in instead; their Google account must first be added as a test user under OAuth consent screen in your Google Cloud console, and uploads then go to their channel.
 
+## Deploying to Render (free)
+
+The repo includes `render.yaml`. Steps:
+
+1. Push to GitHub, then on https://render.com: New > Blueprint > pick the repo. It reads `render.yaml` automatically.
+2. Set three env vars when prompted: `GEMINI_API_KEY`, `HF_TOKEN`, and `GOOGLE_TOKEN_JSON` — get the last one by running `python print_token.py` locally (needs a `token.json` from one successful local upload) and pasting the single-line output.
+3. Deploy. First load after 15 idle minutes takes ~1 minute (free tier wakes from sleep).
+
+Server notes: uploads go to the channel that owns the token. The motion fallback is slow on the free 0.1-CPU instance; the normal lip-sync path is unaffected (rendering happens on Hugging Face's GPU).
+
 ## Notes
 
 - Default API quota allows about 6 uploads per day (1600 units each out of 10000)
