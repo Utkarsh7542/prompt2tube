@@ -1,0 +1,8 @@
+flask
+requests
+gTTS
+edge-tts
+imageio-ffmpeg
+gradio_client
+google-api-python-client
+google-auth-oauthlib

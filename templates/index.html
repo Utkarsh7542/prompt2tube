@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>prompt2tube</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    color: #1c1917;
+    background: #fff;
+  }
+  main {
+    max-width: 540px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 4px;
+  }
+  .sub {
+    color: #57534e;
+    margin: 0 0 12px;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 13px;
+    padding: 3px 10px;
+    border-radius: 99px;
+    background: #f5f5f4;
+    border: 1px solid #d6d3d1;
+    color: #57534e;
+    margin: 0 0 28px;
+  }
+  .badge.on {
+    background: #f0fdf4;
+    border-color: #86efac;
+    color: #15803d;
+  }
+  label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    margin: 20px 0 6px;
+  }
+  input[type="text"], textarea, select {
+    width: 100%;
+    font: inherit;
+    color: inherit;
+    padding: 8px 10px;
+    border: 1px solid #d6d3d1;
+    border-radius: 5px;
+    background: #fff;
+  }
+  textarea { resize: vertical; min-height: 76px; }
+  input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible {
+    outline: 2px solid #b45309;
+    outline-offset: 1px;
+  }
+  .filerow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  input[type="file"] { font: inherit; }
+  input[type="file"]::file-selector-button {
+    font: inherit;
+    padding: 7px 12px;
+    border: 1px solid #d6d3d1;
+    border-radius: 5px;
+    background: #fafaf9;
+    cursor: pointer;
+    margin-right: 10px;
+  }
+  input[type="file"]::file-selector-button:hover { background: #f0efee; }
+  #thumb {
+    width: 52px;
+    height: 52px;
+    border-radius: 5px;
+    object-fit: cover;
+    border: 1px solid #d6d3d1;
+    display: none;
+  }
+  .hint {
+    font-size: 13px;
+    color: #78716c;
+    margin: 6px 0 0;
+  }
+  button.primary {
+    font: inherit;
+    font-weight: 600;
+    color: #fff;
+    background: #b45309;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 18px;
+    margin-top: 28px;
+    cursor: pointer;
+  }
+  button.primary:hover { background: #92400e; }
+  button.primary:disabled {
+    background: #d6d3d1;
+    cursor: default;
+  }
+  #status {
+    margin: 16px 0 0;
+    color: #57534e;
+  }
+  #status.err { color: #b91c1c; }
+  #result {
+    display: none;
+    margin-top: 44px;
+    padding-top: 28px;
+    border-top: 1px solid #e7e5e4;
+  }
+  #result h2 {
+    font-size: 16px;
+    margin: 0 0 14px;
+  }
+  video {
+    width: 100%;
+    border-radius: 5px;
+    background: #000;
+  }
+  .row {
+    display: flex;
+    gap: 12px;
+    align-items: end;
+    margin-top: 24px;
+  }
+  .row > div { flex: 1; }
+  .row label { margin-top: 0; }
+  #ytlink {
+    display: none;
+    margin-top: 16px;
+  }
+  #ytlink a { color: #b45309; }
+</style>
+</head>
+<body>
+<main>
+  <h1>prompt2tube</h1>
+  <p class="sub">A photo and a prompt in, a talking-head video on YouTube out.</p>
+  {% if lipsync %}
+  <p class="badge on">Engine: Hugging Face ZeroGPU (free) &mdash; lip sync, motion fallback</p>
+  {% else %}
+  <p class="badge">Engine: motion only &mdash; pip install gradio_client for free lip sync</p>
+  {% endif %}
+
+  <form id="genform">
+    <label for="photo">Photo</label>
+    <div class="filerow">
+      <input type="file" id="photo" name="photo" accept=".jpg,.jpeg,.png,.webp" required>
+      <img id="thumb" alt="">
+    </div>
+    <p class="hint">A clear headshot works best.</p>
+
+    <label for="prompt">What should they talk about?</label>
+    <textarea id="prompt" name="prompt" required placeholder="e.g. why walking is underrated"></textarea>
+
+    <button class="primary" id="genbtn" type="submit">Generate video</button>
+    <p id="status"></p>
+  </form>
+
+  <section id="result">
+    <h2>Preview <span id="engine" class="badge" style="margin:0"></span></h2>
+    <video id="player" controls></video>
+
+    <label for="title">Title</label>
+    <input type="text" id="title" maxlength="100">
+
+    <label for="desc">Description</label>
+    <textarea id="desc"></textarea>
+
+    <div class="row">
+      <div>
+        <label for="privacy">Visibility</label>
+        <select id="privacy">
+          <option value="unlisted">Unlisted</option>
+          <option value="private">Private</option>
+          <option value="public">Public</option>
+        </select>
+      </div>
+      <button class="primary" id="upbtn" type="button" style="margin-top:0">Upload to YouTube</button>
+    </div>
+    <p id="ytlink"></p>
+  </section>
+</main>
+
+<script>
+  const form = document.getElementById("genform");
+  const status = document.getElementById("status");
+  const genbtn = document.getElementById("genbtn");
+  const upbtn = document.getElementById("upbtn");
+  const result = document.getElementById("result");
+  let current = null;
+
+  document.getElementById("photo").addEventListener("change", (e) => {
+    const thumb = document.getElementById("thumb");
+    const file = e.target.files[0];
+    if (file) {
+      thumb.src = URL.createObjectURL(file);
+      thumb.style.display = "block";
+    } else {
+      thumb.style.display = "none";
+    }
+  });
+
+  function say(msg, isError) {
+    status.textContent = msg;
+    status.className = isError ? "err" : "";
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    genbtn.disabled = true;
+    result.style.display = "none";
+    document.getElementById("ytlink").style.display = "none";
+    say("Writing the script and rendering the video, usually a minute or two...");
+    try {
+      const res = await fetch("/generate", { method: "POST", body: new FormData(form) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "something went wrong");
+      current = data;
+      say("");
+      const eng = document.getElementById("engine");
+      eng.textContent = data.engine === "hf" ? "lip-synced (free ZeroGPU)" : "motion only (fallback)";
+      eng.className = data.engine === "hf" ? "badge on" : "badge";
+      eng.style.margin = "0";
+      if (data.note) say("Lip sync unavailable: " + data.note, true);
+      document.getElementById("player").src = data.video;
+      document.getElementById("title").value = data.title;
+      document.getElementById("desc").value = data.description;
+      result.style.display = "block";
+      result.scrollIntoView({ behavior: "smooth" });
+    } catch (err) {
+      say(err.message, true);
+    }
+    genbtn.disabled = false;
+  });
+
+  upbtn.addEventListener("click", async () => {
+    if (!current) return;
+    upbtn.disabled = true;
+    upbtn.textContent = "Uploading...";
+    try {
+      const res = await fetch("/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: current.path,
+          title: document.getElementById("title").value,
+          description: document.getElementById("desc").value,
+          tags: current.tags,
+          privacy: document.getElementById("privacy").value
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "upload failed");
+      const link = document.getElementById("ytlink");
+      link.innerHTML = "Done. Watch it here: <a href='" + data.url + "' target='_blank'></a>";
+      link.querySelector("a").textContent = data.url;
+      link.style.display = "block";
+    } catch (err) {
+      say(err.message, true);
+    }
+    upbtn.disabled = false;
+    upbtn.textContent = "Upload to YouTube";
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+client_secret.json
+token.json
+static/jobs/
+.env
+venv/
+SadTalker/
