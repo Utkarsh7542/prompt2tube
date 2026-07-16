@@ -1,4 +1,6 @@
 import os
+import shutil
+import time
 import uuid
 from flask import Flask, render_template, request, jsonify
 from generate import make_script
@@ -8,6 +10,20 @@ from yt import upload_video
 app = Flask(__name__)
 JOBS = os.path.join("static", "jobs")
 os.makedirs(JOBS, exist_ok=True)
+
+MAX_JOB_AGE_H = float(os.environ.get("MAX_JOB_AGE_H", "6"))
+
+
+def sweep_jobs():
+    """Working files are scratch space: anything older than MAX_JOB_AGE_H goes."""
+    now = time.time()
+    for name in os.listdir(JOBS):
+        p = os.path.join(JOBS, name)
+        try:
+            if os.path.isdir(p) and now - os.path.getmtime(p) > MAX_JOB_AGE_H * 3600:
+                shutil.rmtree(p, ignore_errors=True)
+        except OSError:
+            pass
 
 
 @app.route("/")
@@ -26,6 +42,7 @@ def generate():
     prompt = request.form.get("prompt", "").strip()
     if not photo or not photo.filename or not prompt:
         return jsonify(error="A photo and a prompt are both required."), 400
+    sweep_jobs()
     job = uuid.uuid4().hex[:10]
     folder = os.path.join(JOBS, job)
     os.makedirs(folder)
@@ -73,6 +90,8 @@ def upload():
         )
     except Exception as e:
         return jsonify(error="Upload failed: " + str(e)), 500
+    # YouTube is now the permanent copy; the local working folder is no longer needed.
+    shutil.rmtree(os.path.dirname(path), ignore_errors=True)
     return jsonify(url=url)
 
 
