@@ -7,3 +7,4 @@ imageio-ffmpeg
 gradio_client
 google-api-python-client
 google-auth-oauthlib
+cryptography

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>prompt2tube — connected accounts</title>
+<style>
+  /* Same design tokens as index.html — one visual language. */
+  :root {
+    --bg: #fafaf9; --surface: #ffffff; --border: #e7e5e4;
+    --ink: #1c1917; --muted: #57534e;
+    --accent: #b45309; --accent-hover: #92400e;
+    --ok-bg: #f0fdf4; --ok-border: #86efac; --ok-ink: #15803d;
+    --err-bg: #fef2f2; --err-border: #fecaca; --err-ink: #b91c1c;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+         font-size: 0.9375rem; line-height: 1.5; color: var(--ink); background: var(--bg); }
+  main { max-width: 580px; margin: 2.5rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.2rem; } h2 { font-size: 1rem; margin-top: 2rem; }
+  a { color: var(--accent); }
+  .card { background: var(--surface); border: 1px solid var(--border);
+          border-radius: var(--radius); padding: 0.75rem 1rem; margin: 0.5rem 0;
+          display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .muted { color: var(--muted); font-size: 0.85rem; }
+  .btn { display: inline-block; background: var(--accent); color: #fff; border: 0;
+         padding: 0.45rem 0.9rem; border-radius: var(--radius); text-decoration: none;
+         font-size: 0.9rem; cursor: pointer; }
+  .btn:hover { background: var(--accent-hover); }
+  .btn.subtle { background: transparent; color: var(--muted);
+                border: 1px solid var(--border); }
+  .warn { background: var(--err-bg); border: 1px solid var(--err-border);
+          color: var(--err-ink); border-radius: var(--radius);
+          padding: 0.6rem 0.9rem; font-size: 0.85rem; margin: 0.5rem 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Connected accounts</h1>
+  <p class="muted">Connect once; pick upload targets after each render.
+  You always log in on the platform's own page — this app never sees or
+  stores a password, only a revocable token, encrypted on this machine.
+  <a href="/">&larr; back to the studio</a></p>
+
+  <h2>Connect a platform</h2>
+  {% if linkedin_missing %}
+    <div class="warn">LinkedIn app keys missing in .env
+    ({{ linkedin_missing|join(', ') }}) — create a LinkedIn developer app
+    with the "Share on LinkedIn" product, then fill them in.</div>
+  {% else %}
+    <div class="card"><span>LinkedIn <span class="muted">(personal profile)</span></span>
+      <a class="btn" href="/hub/connect/linkedin">Connect</a></div>
+  {% endif %}
+  {% if youtube_missing %}
+    <div class="warn">client_secret.json missing — see the README's
+    YouTube setup section.</div>
+  {% else %}
+    <div class="card"><span>YouTube</span>
+      <a class="btn" href="/hub/connect/youtube">Connect</a></div>
+  {% endif %}
+
+  <h2>Connected</h2>
+  {% if not integrations %}
+    <p class="muted">Nothing connected yet.</p>
+  {% endif %}
+  {% for i in integrations %}
+    <div class="card">
+      <span>{{ i.platform }} — {{ i.display_name }}</span>
+      <form method="post" action="/hub/disconnect/{{ i.id }}"
+            onsubmit="return confirm('Disconnect {{ i.display_name }}? The stored token is deleted.');">
+        <button class="btn subtle">Disconnect</button>
+      </form>
+    </div>
+  {% endfor %}
+  <p class="muted">Disconnecting deletes our stored token. To fully revoke,
+  also remove the app in the platform's own settings.</p>
+</main>
+</body>
+</html>
