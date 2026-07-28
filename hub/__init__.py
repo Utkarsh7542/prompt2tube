@@ -46,7 +46,8 @@ def connect(platform):
 @bp.get("/callback/<platform>")
 def callback(platform):
     # CSRF check first: this callback must belong to a flow we started.
-    if not oauth.check_state(request.args.get("state", ""), platform):
+    state = request.args.get("state", "")
+    if not oauth.check_state(state, platform):
         return "State mismatch — start the connect flow again from /hub/.", 400
     if "error" in request.args:  # user clicked Cancel on the platform page
         return redirect("/hub/")
@@ -54,7 +55,8 @@ def callback(platform):
     if platform == "linkedin":
         tok = oauth.linkedin_exchange(code)
     elif platform == "youtube":
-        tok = oauth.youtube_exchange(code)
+        # state travels through to retrieve the PKCE verifier from the first leg
+        tok = oauth.youtube_exchange(code, state)
     else:
         return jsonify(error="Unknown platform"), 404
     display = tok.pop("display_name")

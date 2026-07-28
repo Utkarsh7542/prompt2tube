@@ -109,6 +109,24 @@ def _google_flow():
         redirect_uri=REDIRECT_BASE + "/hub/callback/youtube")
 
 
+# PKCE carry-over, keyed by state.
+#
+# authorization_url() generates a random code_verifier and sends Google only a
+# hash of it (the code_challenge). At exchange time Google wants the original
+# verifier back, as proof that whoever is redeeming the code is whoever started
+# the flow — so an attacker who intercepts the redirect still cannot use it.
+#
+# The catch is that the verifier lives on the Flow OBJECT, and the two halves of
+# this handshake are two separate HTTP requests, so they cannot share one. v1's
+# yt.py never hit this because run_local_server() did both halves in one call.
+# Keep the verifier here between the two requests, keyed by the same state nonce
+# the CSRF check uses.
+#
+# Same POC caveat as _pending_states: in-memory, so a multi-worker deploy needs
+# this in the DB. An abandoned flow leaves one short string behind until restart.
+_pending_verifiers = {}
+
+
 def youtube_auth_url() -> str:
     flow = _google_flow()
     # access_type=offline asks Google for a refresh_token so uploads keep
@@ -116,11 +134,15 @@ def youtube_auth_url() -> str:
     # to actually send one (it omits it on repeat authorizations otherwise).
     url, state = flow.authorization_url(access_type="offline", prompt="consent")
     _pending_states[state] = "youtube"
+    _pending_verifiers[state] = flow.code_verifier
     return url
 
 
-def youtube_exchange(code: str) -> dict:
+def youtube_exchange(code: str, state: str = "") -> dict:
     flow = _google_flow()
+    # Restore the verifier from the request that started this flow. Without it
+    # Google rejects the exchange with "invalid_grant: Missing code verifier".
+    flow.code_verifier = _pending_verifiers.pop(state, None)
     flow.fetch_token(code=code)
     c = flow.credentials
     return {
