@@ -165,7 +165,7 @@
     color: var(--muted);
     margin: 6px 0 0;
   }
-  #heygenbox {
+  .keybox {
     display: none;
     margin-top: 12px;
     padding: 14px;
@@ -173,7 +173,7 @@
     border-radius: var(--radius);
     background: var(--bg);
   }
-  #heygenbox label { font-size: 0.8125rem; }
+  .keybox label { font-size: 0.8125rem; }
 
   /* ---------- buttons & status ---------- */
   button.primary {
@@ -336,11 +336,22 @@
     <div class="field">
       <label for="engine">Renderer</label>
       <select id="engine" name="engine">
-        <option value="hf">Free lip sync (Hugging Face ZeroGPU)</option>
-        <option value="heygen">HeyGen (paid, best quality)</option>
+        <option value="wavespeed" {{ 'selected' if wavespeed_ready }}>WaveSpeed · InfiniteTalk Fast (paid, $0.90/min)</option>
+        <option value="wavespeed-ltx">WaveSpeed · LTX-2.3 Lipsync (paid, $1.80/min, max 20s)</option>
+        <option value="hf" {{ '' if wavespeed_ready else 'selected' }}>Free lip sync (Hugging Face ZeroGPU)</option>
+        <option value="heygen">HeyGen (paid, $1–4/min)</option>
         <option value="motion">Motion only (no lip sync, always works)</option>
       </select>
-      <div id="heygenbox">
+
+      <div id="wavespeedbox" class="keybox">
+        <label for="wavespeed_key">WaveSpeed API key</label>
+        <input type="password" id="wavespeed_key" name="wavespeed_key" autocomplete="off"
+               placeholder="{{ 'server key is set — leave empty to use it' if wavespeed_ready else 'paste your key (used per request, never stored)' }}">
+        <p class="hint" id="wscost">Billed on audio length, 5s minimum. InfiniteTalk $0.015/s (up to 10 min); LTX-2.3 $0.03/s at 720p and hard-capped at 20s of audio.</p>
+        <p class="hint">Your photo and the generated voice are uploaded to WaveSpeed and stay on their CDN for 7 days.</p>
+      </div>
+
+      <div id="heygenbox" class="keybox">
         <label for="heygen_key">HeyGen API key</label>
         <input type="password" id="heygen_key" name="heygen_key" autocomplete="off"
                placeholder="{{ 'server key is set — leave empty to use it' if heygen_ready else 'paste your key (used per request, never stored)' }}">
@@ -411,10 +422,16 @@
     } catch (e) { /* credits display is best-effort, never block the form */ }
   }
 
-  engineSel.addEventListener("change", () => {
-    heygenBox.style.display = engineSel.value === "heygen" ? "block" : "none";
-    if (engineSel.value === "heygen") showCredits();
-  });
+  const waveBox = document.getElementById("wavespeedbox");
+
+  function syncEngineBoxes() {
+    const v = engineSel.value;
+    heygenBox.style.display = v === "heygen" ? "block" : "none";
+    waveBox.style.display = v.startsWith("wavespeed") ? "block" : "none";
+    if (v === "heygen") showCredits();
+  }
+  engineSel.addEventListener("change", syncEngineBoxes);
+  syncEngineBoxes();
   document.getElementById("heygen_key").addEventListener("change", showCredits);
 
   document.getElementById("photo").addEventListener("change", (e) => {
@@ -452,10 +469,15 @@
       current = data;
       say("");
       const eng = document.getElementById("enginebadge");
-      const labels = { heygen: "HeyGen (paid)", hf: "lip-synced (free ZeroGPU)", motion: "motion only (fallback)" };
+      const labels = {
+        "wavespeed": "WaveSpeed · InfiniteTalk (paid)",
+        "wavespeed-ltx": "WaveSpeed · LTX-2.3 (paid)",
+        heygen: "HeyGen (paid)",
+        hf: "lip-synced (free ZeroGPU)",
+        motion: "motion only (no lip sync)"
+      };
       eng.textContent = labels[data.engine] || data.engine;
       eng.className = data.engine === "motion" ? "badge" : "badge on";
-      if (data.note) say("Fell back: " + data.note, true);
       if (data.engine === "heygen") showCredits();
       const m = data.metrics || {};
       const rows = [
@@ -465,6 +487,7 @@
         ["Video length", m.duration_s != null ? m.duration_s + "s" : null],
         ["Credits left", m.credits_left != null ? m.credits_left : null],
         ["Engine", m.engine_detail || null],
+        ["Receipt", m.prediction_id || null],
       ];
       document.getElementById("stats").innerHTML = rows
         .filter(([, v]) => v !== null)

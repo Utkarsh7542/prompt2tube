@@ -7,7 +7,7 @@ Give it a photo and a prompt. It writes a short script with a free AI model, tur
 1. You upload a photo and type a topic
 2. Gemini (free tier) writes a 40-70 word script plus a title and description
 3. edge-tts (free) reads the script out loud
-4. MoDA, an open talking-head model running on a free Hugging Face ZeroGPU Space, turns the photo + voiceover into a lip-synced video. If the Space is busy or the daily GPU quota runs out, ffmpeg falls back to animating the photo with a gentle head sway, so a video always comes out
+4. The renderer you picked turns the photo + voiceover into a lip-synced video. Options: WaveSpeed (hosted InfiniteTalk or LTX-2.3, paid), HeyGen (paid), MoDA on a free Hugging Face ZeroGPU Space, or `motion` — an ffmpeg pass that animates the photo with a gentle head sway and no lip sync at all. Renderers never substitute for one another: if the one you chose fails, you get the reason and pick another, rather than silently receiving a different kind of video
 5. The video uploads to YouTube through the Data API v3 (unlisted by default so you can check it first)
 
 Every stage is free: free Gemini tier, free TTS, free community GPU, free YouTube API quota.
@@ -37,6 +37,14 @@ set HF_TOKEN=your-token
 ```
 
 Optional knobs: `set RENDERER=motion` skips the GPU entirely; `set HF_SPACE=owner/space` points at a different Space.
+
+### HeyGen (optional, paid — production-quality lip sync)
+
+Pick "HeyGen" in the renderer dropdown. Key resolution: a key pasted in the form is used for that request only and never stored; otherwise the server's `HEYGEN_API_KEY` is used. Get a key at https://app.heygen.com/settings/api — pay-as-you-go, minimum $5 top-up (no free API credits since Feb 2026).
+
+Cost: ~$1 per minute of 720p video, so ~$0.50 per short video here; `HEYGEN_AVATAR_IV=1` switches to the newer motion engine at $4/min. The UI shows remaining credits and an estimated cost per render. Uploaded photos are cached by content hash so the same face is never uploaded twice. If HeyGen fails (no credits, bad key, outage) the render fails with that reason; pick another renderer from the dropdown.
+
+*(Superseded 2026-07-28: until then a failed render fell through to the free ZeroGPU renderer and finally to `motion`. That chain was removed because it substituted a visibly different product — a still photo with a pan-and-zoom — while reporting success.)*
 
 ### YouTube API
 
@@ -70,7 +78,7 @@ The repo includes `render.yaml`. Steps:
 2. Set three env vars when prompted: `GEMINI_API_KEY`, `HF_TOKEN`, and `GOOGLE_TOKEN_JSON` — get the last one by running `python print_token.py` locally (needs a `token.json` from one successful local upload) and pasting the single-line output.
 3. Deploy. First load after 15 idle minutes takes ~1 minute (free tier wakes from sleep).
 
-Server notes: uploads go to the channel that owns the token. The motion fallback is slow on the free 0.1-CPU instance; the normal lip-sync path is unaffected (rendering happens on Hugging Face's GPU).
+Server notes: uploads go to the channel that owns the token. The `motion` renderer is slow on the free 0.1-CPU instance because ffmpeg runs locally; the lip-sync paths are unaffected, since rendering happens on Hugging Face's or WaveSpeed's GPUs. Rendering is synchronous, so the gunicorn timeout (900s) is also the maximum render time — long videos need the render moved off the request path.
 
 ## Notes
 

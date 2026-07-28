@@ -46,8 +46,10 @@ def home():
         heygen_iv = avatar_iv_enabled()
     except Exception:
         heygen_iv = False
+    wavespeed_ready = bool(os.environ.get("WAVESPEED_API_KEY", "").strip())
     return render_template("index.html", lipsync=lipsync,
-                           heygen_ready=heygen_ready, heygen_iv=heygen_iv)
+                           heygen_ready=heygen_ready, heygen_iv=heygen_iv,
+                           wavespeed_ready=wavespeed_ready)
 
 
 @app.route("/quota", methods=["POST"])
@@ -71,6 +73,21 @@ def generate():
         return jsonify(error="A photo plus a topic or a script is required."), 400
     if own_script and len(own_script.split()) > 220:
         return jsonify(error="Script too long: keep it under 220 words (~90s of video) to control render cost."), 400
+    engine = request.form.get("engine", "").strip() or None
+    # Per-model ceiling, checked here rather than at render time. The adapter
+    # checks the real (measured) duration before spending anything, so this is
+    # only about feedback speed: without it, an over-cap LTX script would run
+    # Gemini and TTS first and fail a minute later. Pasted scripts only -- a
+    # generated one does not exist yet, so that case still fails in the adapter.
+    if own_script and (engine or "").startswith("wavespeed"):
+        try:
+            from wavespeed import max_words
+            cap = max_words("ltx" if engine.endswith("-ltx") else "infinitetalk")
+        except Exception:
+            cap = None
+        if cap and len(own_script.split()) > cap:
+            return jsonify(error="That renderer caps at about {} words (~{}s of speech). "
+                                 "Shorten the script or pick InfiniteTalk.".format(cap, cap * 60 // 150)), 400
     sweep_jobs()
     job = uuid.uuid4().hex[:10]
     folder = os.path.join(JOBS, job)
@@ -87,19 +104,21 @@ def generate():
             script = make_script(prompt)
         except Exception as e:
             return jsonify(error="Script generation failed: " + str(e)), 500
-    engine = request.form.get("engine", "").strip() or None
     heygen_key = request.form.get("heygen_key", "").strip() or None
+    wavespeed_key = request.form.get("wavespeed_key", "").strip() or None
     try:
-        video_path, engine, note, metrics = make_video(
-            img_path, script["script"], folder, engine=engine, heygen_key=heygen_key
+        video_path, engine, metrics = make_video(
+            img_path, script["script"], folder, engine=engine,
+            heygen_key=heygen_key, wavespeed_key=wavespeed_key
         )
     except Exception as e:
+        # No silent substitution: a failed renderer is an error the person sees,
+        # not a quieter video they did not ask for.
         return jsonify(error="Video render failed: " + str(e)), 500
     return jsonify(
         video="/" + video_path.replace(os.sep, "/"),
         path=video_path,
         engine=engine,
-        note=note,
         metrics=metrics,
         script=script["script"],
         title=script["title"],

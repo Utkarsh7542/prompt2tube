@@ -4,6 +4,19 @@ client_secret.json
 token.json
 static/jobs/
 static/heygen_cache.json
+static/wavespeed_cache.json
+static/wavespeed-receipts.jsonl
+
+# Internal working notes. These are written for me, not for a reader of this
+# repo, and they live in the Second Brain vault instead. Keeping them out means
+# a stranger reading the code is not handed my study notes and my answers to
+# my seniors' objections.
+SENIOR_BRIEF.md
+CODE_TOUR.md
+PRD.md
+PRODUCT.md
+_git_split/
+finish_commits.bat
 .env
 venv/
 SadTalker/

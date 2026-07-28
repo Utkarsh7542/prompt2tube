@@ -4,13 +4,22 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --workers 1 --timeout 600 --bind 0.0.0.0:$PORT app:app
+    # Rendering is synchronous, so the request timeout is also the maximum
+    # render time. Must stay ABOVE wavespeed.POLL_MAX_S (840s) so the adapter
+    # gives up first and can report a reason plus a recoverable prediction id.
+    startCommand: gunicorn --workers 1 --timeout 900 --bind 0.0.0.0:$PORT app:app
     envVars:
       - key: GEMINI_API_KEY
         sync: false
       - key: HF_TOKEN
         sync: false
       - key: GOOGLE_TOKEN_JSON
+        sync: false
+      # Paid renderers. Without these the hosted deploy can only use a key
+      # pasted into the form per request.
+      - key: WAVESPEED_API_KEY
+        sync: false
+      - key: HEYGEN_API_KEY
         sync: false
       - key: PYTHON_VERSION
         value: 3.12.6

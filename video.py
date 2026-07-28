@@ -3,7 +3,6 @@ import glob
 import os
 import shutil
 import subprocess
-from gtts import gTTS
 
 HF_SPACE = "multimodalart/MoDA-fast-talking-head"
 
@@ -41,6 +40,10 @@ def say(text, path):
         import edge_tts
         asyncio.run(edge_tts.Communicate(text, name).save(path))
     except Exception:
+        # Lazy, like edge_tts above. gTTS only runs when edge-tts is missing or
+        # fails, so importing it at module load made every consumer of this
+        # module depend on a package the normal path never touches.
+        from gtts import gTTS
         gTTS(text).save(path)
 
 
@@ -74,7 +77,12 @@ def hf_render(img_path, voice, folder):
 
 
 def motion_render(img_path, voice, folder):
-    """Free fallback: the still photo with a gentle head-sway, plus the voiceover."""
+    """The still photo with a gentle head-sway, plus the voiceover. No lip sync.
+
+    Not a fallback: it is chosen explicitly. Its value is having zero
+    dependencies -- no GPU, no network, no API key -- which makes it the way to
+    verify the rest of the pipeline (script, voice, mux, upload) when every
+    renderer is unavailable."""
     out = os.path.join(folder, "video.mp4")
     cmd = [
         find_ffmpeg(), "-y",
@@ -94,36 +102,62 @@ def motion_render(img_path, voice, folder):
     return out
 
 
-def make_video(img_path, script, folder, engine=None, heygen_key=None):
-    """Render with the requested engine, degrading down the chain on failure:
-    heygen (paid, only when asked) -> hf (free ZeroGPU) -> motion (local ffmpeg).
-    Returns (video_path, engine_used, note, metrics). note carries a fallback
-    reason; metrics carries per-render cost and timing for the UI."""
+def make_video(img_path, script, folder, engine=None, heygen_key=None,
+               wavespeed_key=None):
+    """Render with the engine that was requested. No automatic substitution.
+
+    Until 2026-07-28 this was a chain (heygen -> hf -> motion), each rung
+    catching the one above. That was removed: `motion` produces a still photo
+    with a pan-and-zoom, so a request for lip sync could return a materially
+    different output reported as success. Whether the failed engine was paid or
+    free does not change that, which is why no rung survives.
+
+    The selected engine runs and a failure propagates. `hf` and `motion` remain
+    selectable; `motion` in particular is the only path requiring no GPU, no
+    network and no key, so it verifies script -> voice -> mux -> upload when no
+    renderer is reachable. Accepted trade-off: a transient renderer outage now
+    returns an error rather than a lesser video.
+
+    Returns (video_path, engine_used, metrics).
+    """
     import time
     engine = (engine or os.environ.get("RENDERER", "hf")).lower()
-    note = ""
     started = time.time()
-    if engine == "heygen":
-        try:
-            from heygen import heygen_render
-            path, metrics = heygen_render(img_path, script, folder, heygen_key)
-            return path, "heygen", "", metrics
-        except Exception as e:
-            note = str(e)[:300]
-            print("HeyGen render failed, falling back to free path:", note)
-        engine = "hf"  # degrade, never die
+
+    # Voice is a pipeline stage, not a detail of one branch. It used to sit
+    # below the HeyGen block because HeyGen does its own TTS and only the free
+    # path needed an mp3; WaveSpeed takes audio, so it has to happen first.
+    # HeyGen is the one engine that does not consume ours, so it does not pay
+    # for the TTS it will ignore.
     voice = os.path.join(folder, "voice.mp3")
-    say(script, voice)
-    if engine != "motion":
-        try:
-            path = hf_render(img_path, voice, folder)
-            metrics = {"est_cost": 0.0, "render_s": round(time.time() - started),
-                       "engine_detail": "free ZeroGPU"}
-            return path, "hf", note, metrics
-        except Exception as e:
-            note = (note + " | " if note else "") + str(e)[:300]
-            print("HF Space render failed, falling back to motion:", note)
-    path = motion_render(img_path, voice, folder)
-    metrics = {"est_cost": 0.0, "render_s": round(time.time() - started),
-               "engine_detail": "local ffmpeg"}
-    return path, "motion", note, metrics
+    if engine != "heygen":
+        say(script, voice)
+
+    if engine.startswith("wavespeed"):
+        # "wavespeed" -> InfiniteTalk Fast (default), "wavespeed-ltx" -> LTX-2.3.
+        # Both consume the same voice.mp3, which is what makes comparing them fair.
+        from wavespeed import wavespeed_render
+        model = "ltx" if engine.endswith("-ltx") else "infinitetalk"
+        path, metrics = wavespeed_render(img_path, voice, folder,
+                                         model=model, request_key=wavespeed_key)
+        return path, engine, metrics
+
+    if engine == "heygen":
+        from heygen import heygen_render
+        path, metrics = heygen_render(img_path, script, folder, heygen_key)
+        return path, "heygen", metrics
+
+    if engine == "hf":
+        path = hf_render(img_path, voice, folder)
+        return path, "hf", {"est_cost": 0.0,
+                            "render_s": round(time.time() - started),
+                            "engine_detail": "free ZeroGPU"}
+
+    if engine == "motion":
+        path = motion_render(img_path, voice, folder)
+        return path, "motion", {"est_cost": 0.0,
+                                "render_s": round(time.time() - started),
+                                "engine_detail": "local ffmpeg"}
+
+    raise ValueError("unknown renderer {!r}; known: wavespeed, wavespeed-ltx, "
+                     "heygen, hf, motion".format(engine))
