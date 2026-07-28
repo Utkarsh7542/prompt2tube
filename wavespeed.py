@@ -85,11 +85,29 @@ class WaveSpeedError(RuntimeError):
 #        an unusable request never costs anything.
 
 MODELS = {
+    # Fast is the distilled tier: cheapest, and it exposes no resolution knob
+    # because it renders at a fixed small size. Measured 2026-07-28: a
+    # 1408x768 input came back 640x352, a 2.2x downscale. That is the tier's
+    # defining limit, not a bad render -- at that size the mouth is ~60px wide
+    # and lip detail has nowhere to live. Use it for cheap iteration, not for
+    # judging whether a model can do the job.
     "infinitetalk": {
         "path": "wavespeed-ai/infinitetalk-fast",
         "label": "InfiniteTalk Fast",
         "rates": {None: 0.015},
         "resolution": None,
+        "min_billed_s": 5,
+        "min_audio_s": 0,
+        "max_audio_s": 600,
+        "image_required": True,
+    },
+    # The full model: same architecture, selectable output resolution. This is
+    # the tier the self-hosted RunPod campaign proved production-grade.
+    "infinitetalk-hd": {
+        "path": "wavespeed-ai/infinitetalk",
+        "label": "InfiniteTalk",
+        "rates": {"480p": 0.03, "720p": 0.06},
+        "resolution": "720p",
         "min_billed_s": 5,
         "min_audio_s": 0,
         "max_audio_s": 600,

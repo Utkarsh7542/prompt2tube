@@ -153,6 +153,22 @@ class WaveSpeedTests(unittest.TestCase):
         with self.assertRaises(wavespeed.WaveSpeedError):
             wavespeed.spec_for("kling")
 
+    def test_infinitetalk_hd_defaults_to_720p_at_the_hd_rate(self):
+        """The full model exposes a resolution knob that Fast does not."""
+        api = FakeAPI()
+        _, metrics = self._render(api, duration=10.0, model="infinitetalk-hd")
+        self.assertEqual(api.payload()["resolution"], "720p")
+        self.assertEqual(metrics["est_cost"], 0.60)  # 10s x $0.06
+        self.assertIn("720p", metrics["engine_detail"])
+
+    def test_adding_a_model_needed_no_new_code_path(self):
+        """The registry is data: every model runs the same generic pipeline."""
+        for key in ("infinitetalk", "infinitetalk-hd", "ltx"):
+            api = FakeAPI()
+            path, metrics = self._render(api, duration=10.0, model=key)
+            self.assertTrue(path.endswith("video.mp4"), key)
+            self.assertIn("prediction_id", metrics)
+
     # --- receipts: never pay and lose the video -----------------------------
 
     def test_receipt_is_written_at_submit_not_at_success(self):

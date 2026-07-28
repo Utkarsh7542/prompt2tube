@@ -134,10 +134,12 @@ def make_video(img_path, script, folder, engine=None, heygen_key=None,
         say(script, voice)
 
     if engine.startswith("wavespeed"):
-        # "wavespeed" -> InfiniteTalk Fast (default), "wavespeed-ltx" -> LTX-2.3.
-        # Both consume the same voice.mp3, which is what makes comparing them fair.
+        # Everything after "wavespeed-" is the model key in wavespeed.MODELS, so
+        # adding a model there makes it selectable here with no change to this
+        # file. Bare "wavespeed" means the adapter's default. Every model
+        # consumes the same voice.mp3, which is what makes comparing them fair.
         from wavespeed import wavespeed_render
-        model = "ltx" if engine.endswith("-ltx") else "infinitetalk"
+        model = engine.split("wavespeed-", 1)[1] if engine.startswith("wavespeed-") else None
         path, metrics = wavespeed_render(img_path, voice, folder,
                                          model=model, request_key=wavespeed_key)
         return path, engine, metrics

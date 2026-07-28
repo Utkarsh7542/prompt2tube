@@ -336,8 +336,9 @@
     <div class="field">
       <label for="engine">Renderer</label>
       <select id="engine" name="engine">
-        <option value="wavespeed" {{ 'selected' if wavespeed_ready }}>WaveSpeed · InfiniteTalk Fast (paid, $0.90/min)</option>
-        <option value="wavespeed-ltx">WaveSpeed · LTX-2.3 Lipsync (paid, $1.80/min, max 20s)</option>
+        <option value="wavespeed" {{ 'selected' if wavespeed_ready }}>WaveSpeed · InfiniteTalk Fast ($0.90/min, ~640x352)</option>
+        <option value="wavespeed-infinitetalk-hd">WaveSpeed · InfiniteTalk 720p ($3.60/min)</option>
+        <option value="wavespeed-ltx">WaveSpeed · LTX-2.3 Lipsync 720p ($1.80/min, max 20s)</option>
         <option value="hf" {{ '' if wavespeed_ready else 'selected' }}>Free lip sync (Hugging Face ZeroGPU)</option>
         <option value="heygen">HeyGen (paid, $1–4/min)</option>
         <option value="motion">Motion only (no lip sync, always works)</option>
