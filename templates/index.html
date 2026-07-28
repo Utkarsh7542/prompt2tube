@@ -5,171 +5,362 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>prompt2tube</title>
 <style>
+  :root {
+    --bg: #fafaf9;
+    --surface: #ffffff;
+    --border: #e7e5e4;
+    --border-strong: #d6d3d1;
+    --ink: #1c1917;
+    --muted: #57534e;
+    --accent: #b45309;
+    --accent-hover: #92400e;
+    --ok-bg: #f0fdf4;
+    --ok-border: #86efac;
+    --ok-ink: #15803d;
+    --err-bg: #fef2f2;
+    --err-border: #fecaca;
+    --err-ink: #b91c1c;
+    --radius: 8px;
+  }
   * { box-sizing: border-box; }
   body {
     margin: 0;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    font-size: 15px;
+    font-size: 0.9375rem;
     line-height: 1.5;
-    color: #1c1917;
-    background: #fff;
+    color: var(--ink);
+    background: var(--bg);
   }
   main {
-    max-width: 540px;
+    max-width: 580px;
     margin: 0 auto;
-    padding: 48px 20px 80px;
+    padding: 40px 20px 64px;
   }
-  h1 {
-    font-size: 22px;
-    margin: 0 0 4px;
+
+  /* ---------- header ---------- */
+  header { margin-bottom: 24px; }
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
   }
-  .sub {
-    color: #57534e;
-    margin: 0 0 12px;
+  .brand h1 {
+    font-size: 1.25rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    margin: 0;
   }
-  .badge {
-    display: inline-block;
-    font-size: 13px;
-    padding: 3px 10px;
+  .brand .chip {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 2px 9px;
     border-radius: 99px;
-    background: #f5f5f4;
-    border: 1px solid #d6d3d1;
-    color: #57534e;
-    margin: 0 0 28px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--muted);
   }
-  .badge.on {
-    background: #f0fdf4;
-    border-color: #86efac;
-    color: #15803d;
+  .brand .chip.on {
+    background: var(--ok-bg);
+    border-color: var(--ok-border);
+    color: var(--ok-ink);
   }
+  .sub { color: var(--muted); margin: 6px 0 0; }
+  .pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 14px 0 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+  .pipeline span {
+    padding: 3px 9px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 99px;
+  }
+  .pipeline .arrow { border: none; background: none; padding: 0; color: var(--border-strong); }
+
+  /* ---------- panels ---------- */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  #result.panel { margin-top: 24px; }
+
+  /* ---------- form ---------- */
   label {
     display: block;
-    font-size: 14px;
+    font-size: 0.875rem;
     font-weight: 600;
-    margin: 20px 0 6px;
+    margin: 0 0 6px;
   }
-  input[type="text"], textarea, select {
+  .opt {
+    font-weight: 400;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  a.secondary {
+    display: inline-block;
+    font: inherit;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    padding: 9px 16px;
+    text-decoration: none;
+    transition: background-color 150ms ease-out;
+  }
+  a.secondary:hover { background: var(--bg); }
+  .field { margin-bottom: 20px; }
+  .field:last-of-type { margin-bottom: 0; }
+  input[type="text"], input[type="password"], textarea, select {
     width: 100%;
     font: inherit;
     color: inherit;
-    padding: 8px 10px;
-    border: 1px solid #d6d3d1;
-    border-radius: 5px;
-    background: #fff;
+    padding: 9px 11px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    transition: border-color 150ms ease-out;
   }
+  input:hover, textarea:hover, select:hover { border-color: #a8a29e; }
+  ::placeholder { color: var(--muted); opacity: 1; }
   textarea { resize: vertical; min-height: 76px; }
   input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible {
-    outline: 2px solid #b45309;
+    outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
-  .filerow {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  input[type="file"] { font: inherit; }
+  .filerow { display: flex; align-items: center; gap: 12px; }
+  input[type="file"] { font: inherit; font-size: 0.875rem; color: var(--muted); }
   input[type="file"]::file-selector-button {
     font: inherit;
-    padding: 7px 12px;
-    border: 1px solid #d6d3d1;
-    border-radius: 5px;
-    background: #fafaf9;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--ink);
+    padding: 8px 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
     cursor: pointer;
     margin-right: 10px;
+    transition: background-color 150ms ease-out;
   }
-  input[type="file"]::file-selector-button:hover { background: #f0efee; }
+  input[type="file"]::file-selector-button:hover { background: var(--bg); }
   #thumb {
-    width: 52px;
-    height: 52px;
-    border-radius: 5px;
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius);
     object-fit: cover;
-    border: 1px solid #d6d3d1;
+    border: 1px solid var(--border);
     display: none;
   }
   .hint {
-    font-size: 13px;
-    color: #78716c;
+    font-size: 0.8125rem;
+    color: var(--muted);
     margin: 6px 0 0;
   }
+  #heygenbox {
+    display: none;
+    margin-top: 12px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+  }
+  #heygenbox label { font-size: 0.8125rem; }
+
+  /* ---------- buttons & status ---------- */
   button.primary {
     font: inherit;
     font-weight: 600;
     color: #fff;
-    background: #b45309;
+    background: var(--accent);
     border: none;
-    border-radius: 5px;
-    padding: 10px 18px;
-    margin-top: 28px;
+    border-radius: var(--radius);
+    padding: 10px 20px;
+    margin-top: 24px;
     cursor: pointer;
+    transition: background-color 150ms ease-out;
   }
-  button.primary:hover { background: #92400e; }
-  button.primary:disabled {
-    background: #d6d3d1;
-    cursor: default;
+  button.primary:hover { background: var(--accent-hover); }
+  button.primary:disabled { background: var(--border-strong); cursor: default; }
+  button.primary.busy::after {
+    content: "";
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-left: 8px;
+    vertical-align: -1px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
   }
-  #status {
-    margin: 16px 0 0;
-    color: #57534e;
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #status { margin: 14px 0 0; color: var(--muted); font-size: 0.875rem; }
+  #status.err {
+    color: var(--err-ink);
+    background: var(--err-bg);
+    border: 1px solid var(--err-border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
   }
-  #status.err { color: #b91c1c; }
-  #result {
-    display: none;
-    margin-top: 44px;
-    padding-top: 28px;
-    border-top: 1px solid #e7e5e4;
+  #status:empty { display: none; }
+
+  /* ---------- result ---------- */
+  #result { display: none; }
+  #result.show { display: block; animation: rise 200ms ease-out; }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
   }
   #result h2 {
-    font-size: 16px;
+    font-size: 1rem;
     margin: 0 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .badge {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 2px 9px;
+    border-radius: 99px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg);
+    color: var(--muted);
+  }
+  .badge.on {
+    background: var(--ok-bg);
+    border-color: var(--ok-border);
+    color: var(--ok-ink);
   }
   video {
     width: 100%;
-    border-radius: 5px;
+    border-radius: var(--radius);
     background: #000;
+    border: 1px solid var(--border);
   }
+  .stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 28px;
+    margin: 14px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .stats:empty { display: none; }
+  .stats div { min-width: 90px; }
+  .stats dt {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin: 0;
+  }
+  .stats dd {
+    font-size: 0.875rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    margin: 0;
+  }
+  #result label { margin-top: 18px; }
   .row {
     display: flex;
     gap: 12px;
     align-items: end;
-    margin-top: 24px;
+    margin-top: 22px;
   }
   .row > div { flex: 1; }
   .row label { margin-top: 0; }
-  #ytlink {
-    display: none;
-    margin-top: 16px;
+  #ytlink { display: none; margin: 14px 0 0; font-size: 0.875rem; }
+  #ytlink a { color: var(--accent); }
+
+  footer {
+    margin-top: 28px;
+    font-size: 0.8125rem;
+    color: var(--muted);
+    text-align: center;
   }
-  #ytlink a { color: #b45309; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
 </style>
 </head>
 <body>
 <main>
-  <h1>prompt2tube</h1>
-  <p class="sub">A photo and a prompt in, a talking-head video on YouTube out.</p>
-  {% if lipsync %}
-  <p class="badge on">Engine: Hugging Face ZeroGPU (free) &mdash; lip sync, motion fallback</p>
-  {% else %}
-  <p class="badge">Engine: motion only &mdash; pip install gradio_client for free lip sync</p>
-  {% endif %}
-
-  <form id="genform">
-    <label for="photo">Photo</label>
-    <div class="filerow">
-      <input type="file" id="photo" name="photo" accept=".jpg,.jpeg,.png,.webp" required>
-      <img id="thumb" alt="">
+  <header>
+    <div class="brand">
+      <h1>prompt2tube</h1>
+      {% if lipsync %}
+      <span class="chip on">free lip sync ready</span>
+      {% else %}
+      <span class="chip">motion only</span>
+      {% endif %}
     </div>
-    <p class="hint">A clear headshot works best.</p>
+    <p class="sub">A photo and a prompt in, a talking-head video on YouTube out.</p>
+    <div class="pipeline" aria-label="Pipeline stages">
+      <span>script</span><span class="arrow">&rarr;</span>
+      <span>voice</span><span class="arrow">&rarr;</span>
+      <span>lip sync</span><span class="arrow">&rarr;</span>
+      <span>YouTube</span>
+    </div>
+  </header>
 
-    <label for="prompt">What should they talk about?</label>
-    <textarea id="prompt" name="prompt" required placeholder="e.g. why walking is underrated"></textarea>
+  <form id="genform" class="panel">
+    <div class="field">
+      <label for="photo">Photo</label>
+      <div class="filerow">
+        <input type="file" id="photo" name="photo" accept=".jpg,.jpeg,.png,.webp" required>
+        <img id="thumb" alt="Selected photo preview">
+      </div>
+      <p class="hint">A clear, front-facing headshot works best.</p>
+    </div>
+
+    <div class="field">
+      <label for="prompt">What should they talk about?</label>
+      <textarea id="prompt" name="prompt" placeholder="e.g. why walking is underrated"></textarea>
+    </div>
+
+    <div class="field">
+      <label for="script">Script <span class="opt">optional</span></label>
+      <textarea id="script" name="script" placeholder="Already have the exact words? Paste them here and the AI writer is skipped."></textarea>
+      <p class="hint">Under 220 words. Leave empty and Gemini writes one from the topic above.</p>
+    </div>
+
+    <div class="field">
+      <label for="engine">Renderer</label>
+      <select id="engine" name="engine">
+        <option value="hf">Free lip sync (Hugging Face ZeroGPU)</option>
+        <option value="heygen">HeyGen (paid, best quality)</option>
+        <option value="motion">Motion only (no lip sync, always works)</option>
+      </select>
+      <div id="heygenbox">
+        <label for="heygen_key">HeyGen API key</label>
+        <input type="password" id="heygen_key" name="heygen_key" autocomplete="off"
+               placeholder="{{ 'server key is set — leave empty to use it' if heygen_ready else 'paste your key (used per request, never stored)' }}">
+        <p class="hint" id="credits">Standard renders cost about $1 per video minute (~$0.50 for these short scripts).</p>
+      {% if heygen_iv %}
+      <p class="hint" style="color:#15803d">Engine: Avatar IV — gestures + motion prompt on, $4/min.</p>
+      {% else %}
+      <p class="hint">Engine: standard (Avatar III). For gestures set HEYGEN_AVATAR_IV=1 in .env and restart.</p>
+      {% endif %}
+      </div>
+    </div>
 
     <button class="primary" id="genbtn" type="submit">Generate video</button>
-    <p id="status"></p>
+    <p id="status" role="status"></p>
   </form>
 
-  <section id="result">
-    <h2>Preview <span id="engine" class="badge" style="margin:0"></span></h2>
+  <section id="result" class="panel">
+    <h2>Preview <span id="enginebadge" class="badge"></span></h2>
     <video id="player" controls></video>
+    <dl class="stats" id="stats"></dl>
 
     <label for="title">Title</label>
     <input type="text" id="title" maxlength="100">
@@ -186,10 +377,13 @@
           <option value="public">Public</option>
         </select>
       </div>
+      <a id="download" class="secondary" download>Download</a>
       <button class="primary" id="upbtn" type="button" style="margin-top:0">Upload to YouTube</button>
     </div>
     <p id="ytlink"></p>
   </section>
+
+  <footer>Videos upload unlisted by default &middot; working files auto-clean after 6 hours</footer>
 </main>
 
 <script>
@@ -199,6 +393,29 @@
   const upbtn = document.getElementById("upbtn");
   const result = document.getElementById("result");
   let current = null;
+
+  const engineSel = document.getElementById("engine");
+  const heygenBox = document.getElementById("heygenbox");
+  const creditsEl = document.getElementById("credits");
+
+  async function showCredits() {
+    const key = document.getElementById("heygen_key").value.trim();
+    try {
+      const res = await fetch("/quota", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(key ? { heygen_key: key } : {})
+      });
+      const data = await res.json();
+      if (res.ok) creditsEl.textContent = "Credits left: " + data.credits + " (1 credit ≈ 1 min of standard video)";
+    } catch (e) { /* credits display is best-effort, never block the form */ }
+  }
+
+  engineSel.addEventListener("change", () => {
+    heygenBox.style.display = engineSel.value === "heygen" ? "block" : "none";
+    if (engineSel.value === "heygen") showCredits();
+  });
+  document.getElementById("heygen_key").addEventListener("change", showCredits);
 
   document.getElementById("photo").addEventListener("change", (e) => {
     const thumb = document.getElementById("thumb");
@@ -218,8 +435,14 @@
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (!document.getElementById("prompt").value.trim() && !document.getElementById("script").value.trim()) {
+      say("Give a topic, or paste a script.", true);
+      return;
+    }
     genbtn.disabled = true;
-    result.style.display = "none";
+    genbtn.classList.add("busy");
+    genbtn.textContent = "Generating";
+    result.classList.remove("show");
     document.getElementById("ytlink").style.display = "none";
     say("Writing the script and rendering the video, usually a minute or two...");
     try {
@@ -228,20 +451,39 @@
       if (!res.ok) throw new Error(data.error || "something went wrong");
       current = data;
       say("");
-      const eng = document.getElementById("engine");
-      eng.textContent = data.engine === "hf" ? "lip-synced (free ZeroGPU)" : "motion only (fallback)";
-      eng.className = data.engine === "hf" ? "badge on" : "badge";
-      eng.style.margin = "0";
-      if (data.note) say("Lip sync unavailable: " + data.note, true);
+      const eng = document.getElementById("enginebadge");
+      const labels = { heygen: "HeyGen (paid)", hf: "lip-synced (free ZeroGPU)", motion: "motion only (fallback)" };
+      eng.textContent = labels[data.engine] || data.engine;
+      eng.className = data.engine === "motion" ? "badge" : "badge on";
+      if (data.note) say("Fell back: " + data.note, true);
+      if (data.engine === "heygen") showCredits();
+      const m = data.metrics || {};
+      const rows = [
+        ["Cost", m.credits_used != null ? "$" + m.credits_used.toFixed(2) + " (measured)"
+                 : m.est_cost > 0 ? "$" + m.est_cost.toFixed(2) + " (est.)" : "$0.00 (free)"],
+        ["Render time", m.render_s != null ? m.render_s + "s" : null],
+        ["Video length", m.duration_s != null ? m.duration_s + "s" : null],
+        ["Credits left", m.credits_left != null ? m.credits_left : null],
+        ["Engine", m.engine_detail || null],
+      ];
+      document.getElementById("stats").innerHTML = rows
+        .filter(([, v]) => v !== null)
+        .map(([k, v]) => "<div><dt>" + k + "</dt><dd>" + v + "</dd></div>")
+        .join("");
       document.getElementById("player").src = data.video;
       document.getElementById("title").value = data.title;
       document.getElementById("desc").value = data.description;
-      result.style.display = "block";
+      const dl = document.getElementById("download");
+      dl.href = data.video;
+      dl.setAttribute("download", (data.title || "video").replace(/[^\w\- ]/g, "").trim().slice(0, 60) + ".mp4");
+      result.classList.add("show");
       result.scrollIntoView({ behavior: "smooth" });
     } catch (err) {
       say(err.message, true);
     }
     genbtn.disabled = false;
+    genbtn.classList.remove("busy");
+    genbtn.textContent = "Generate video";
   });
 
   upbtn.addEventListener("click", async () => {

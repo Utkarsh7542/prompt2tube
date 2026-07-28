@@ -3,6 +3,9 @@ __pycache__/
 client_secret.json
 token.json
 static/jobs/
+static/heygen_cache.json
 .env
 venv/
 SadTalker/
+.secrets/
+hub.db

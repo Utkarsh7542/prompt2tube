@@ -3,11 +3,18 @@ import shutil
 import time
 import uuid
 from flask import Flask, render_template, request, jsonify
-from generate import make_script
+from generate import make_script, make_meta
 from video import make_video
 from yt import upload_video
 
 app = Flask(__name__)
+
+# Publish hub (PRD v0.2 §4): connect-once accounts + multi-platform
+# publishing live behind /hub/*. app.py knows the prefix, nothing else —
+# that seam is what lets the hub become its own service later.
+from hub import bp as hub_bp
+app.register_blueprint(hub_bp)
+
 JOBS = os.path.join("static", "jobs")
 os.makedirs(JOBS, exist_ok=True)
 
@@ -33,15 +40,37 @@ def home():
         lipsync = os.environ.get("RENDERER", "hf").lower() != "motion"
     except ImportError:
         lipsync = False
-    return render_template("index.html", lipsync=lipsync)
+    heygen_ready = bool(os.environ.get("HEYGEN_API_KEY", "").strip())
+    try:
+        from heygen import avatar_iv_enabled
+        heygen_iv = avatar_iv_enabled()
+    except Exception:
+        heygen_iv = False
+    return render_template("index.html", lipsync=lipsync,
+                           heygen_ready=heygen_ready, heygen_iv=heygen_iv)
+
+
+@app.route("/quota", methods=["POST"])
+def quota():
+    """Remaining HeyGen credits. The key comes from the request (BYOK) or the
+    server env; it is used for this one call and never stored anywhere."""
+    data = request.get_json(silent=True) or {}
+    try:
+        from heygen import remaining_credits
+        return jsonify(credits=remaining_credits(data.get("heygen_key")))
+    except Exception as e:
+        return jsonify(error=str(e)), 400
 
 
 @app.route("/generate", methods=["POST"])
 def generate():
     photo = request.files.get("photo")
     prompt = request.form.get("prompt", "").strip()
-    if not photo or not photo.filename or not prompt:
-        return jsonify(error="A photo and a prompt are both required."), 400
+    own_script = request.form.get("script", "").strip()
+    if not photo or not photo.filename or not (prompt or own_script):
+        return jsonify(error="A photo plus a topic or a script is required."), 400
+    if own_script and len(own_script.split()) > 220:
+        return jsonify(error="Script too long: keep it under 220 words (~90s of video) to control render cost."), 400
     sweep_jobs()
     job = uuid.uuid4().hex[:10]
     folder = os.path.join(JOBS, job)
@@ -51,12 +80,19 @@ def generate():
         return jsonify(error="Use a jpg, png or webp image."), 400
     img_path = os.path.join(folder, "photo" + ext)
     photo.save(img_path)
+    if own_script:
+        script = make_meta(own_script, prompt)
+    else:
+        try:
+            script = make_script(prompt)
+        except Exception as e:
+            return jsonify(error="Script generation failed: " + str(e)), 500
+    engine = request.form.get("engine", "").strip() or None
+    heygen_key = request.form.get("heygen_key", "").strip() or None
     try:
-        script = make_script(prompt)
-    except Exception as e:
-        return jsonify(error="Script generation failed: " + str(e)), 500
-    try:
-        video_path, engine, note = make_video(img_path, script["script"], folder)
+        video_path, engine, note, metrics = make_video(
+            img_path, script["script"], folder, engine=engine, heygen_key=heygen_key
+        )
     except Exception as e:
         return jsonify(error="Video render failed: " + str(e)), 500
     return jsonify(
@@ -64,6 +100,7 @@ def generate():
         path=video_path,
         engine=engine,
         note=note,
+        metrics=metrics,
         script=script["script"],
         title=script["title"],
         description=script["description"],
@@ -90,8 +127,8 @@ def upload():
         )
     except Exception as e:
         return jsonify(error="Upload failed: " + str(e)), 500
-    # YouTube is now the permanent copy; the local working folder is no longer needed.
-    shutil.rmtree(os.path.dirname(path), ignore_errors=True)
+    # Keep the local file so Download still works after upload; the 6h sweep
+    # cleans the folder anyway.
     return jsonify(url=url)
 
 

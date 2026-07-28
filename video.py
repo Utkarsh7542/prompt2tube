@@ -94,14 +94,36 @@ def motion_render(img_path, voice, folder):
     return out
 
 
-def make_video(img_path, script, folder):
-    voice = os.path.join(folder, "voice.mp3")
-    say(script, voice)
+def make_video(img_path, script, folder, engine=None, heygen_key=None):
+    """Render with the requested engine, degrading down the chain on failure:
+    heygen (paid, only when asked) -> hf (free ZeroGPU) -> motion (local ffmpeg).
+    Returns (video_path, engine_used, note, metrics). note carries a fallback
+    reason; metrics carries per-render cost and timing for the UI."""
+    import time
+    engine = (engine or os.environ.get("RENDERER", "hf")).lower()
     note = ""
-    if os.environ.get("RENDERER", "hf").lower() != "motion":
+    started = time.time()
+    if engine == "heygen":
         try:
-            return hf_render(img_path, voice, folder), "hf", ""
+            from heygen import heygen_render
+            path, metrics = heygen_render(img_path, script, folder, heygen_key)
+            return path, "heygen", "", metrics
         except Exception as e:
             note = str(e)[:300]
+            print("HeyGen render failed, falling back to free path:", note)
+        engine = "hf"  # degrade, never die
+    voice = os.path.join(folder, "voice.mp3")
+    say(script, voice)
+    if engine != "motion":
+        try:
+            path = hf_render(img_path, voice, folder)
+            metrics = {"est_cost": 0.0, "render_s": round(time.time() - started),
+                       "engine_detail": "free ZeroGPU"}
+            return path, "hf", note, metrics
+        except Exception as e:
+            note = (note + " | " if note else "") + str(e)[:300]
             print("HF Space render failed, falling back to motion:", note)
-    return motion_render(img_path, voice, folder), "motion", note
+    path = motion_render(img_path, voice, folder)
+    metrics = {"est_cost": 0.0, "render_s": round(time.time() - started),
+               "engine_detail": "local ffmpeg"}
+    return path, "motion", note, metrics
