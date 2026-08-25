@@ -175,6 +175,31 @@ class TestBYOK(Base):
         self.assertEqual(jobs.get(jid)["status"], jobs.FAILED)
         self.assertEqual(jobs.read_keys(jid), {})    # not left behind on failure
 
+    def test_gemini_key_flows_to_the_script_writer(self):
+        """The tester's Gemini key reaches script generation (full BYOK)."""
+        import generate
+        self.script.stop()  # use the real resolve_script for this one
+        jid = self._enqueue(keys={"runpod": "rp", "fish": "fi", "gemini": "gk"})
+        seen = {}
+
+        def cap_make_script(topic, api_key=None):
+            seen["gemini"] = api_key
+            return {"script": "s", "title": "t", "description": "", "tags": []}
+
+        try:
+            with mock.patch.object(generate, "make_script", side_effect=cap_make_script), \
+                 mock.patch.object(worker.video, "say", return_value={"est_cost": 0.015}), \
+                 mock.patch.object(worker.runpod, "prepare_and_submit", return_value=("rp-1", _PREP)), \
+                 mock.patch.object(worker.runpod, "resolve_key", side_effect=lambda k=None: k or "env"), \
+                 mock.patch.object(worker.runpod, "collect", return_value=("u", 0.25, {})), \
+                 mock.patch.object(worker.runpod, "download", side_effect=lambda u, o, j=None: o):
+                worker.run_once()
+        finally:
+            self.script.start()  # restore so tearDown stays balanced
+
+        self.assertEqual(seen["gemini"], "gk")
+        self.assertEqual(jobs.get(jid)["status"], jobs.DONE)
+
 
 class TestRestartSurvival(Base):
     def test_a_paid_interrupted_render_is_resumed(self):

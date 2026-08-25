@@ -184,19 +184,25 @@ def generate():
     img_path = os.path.join(folder, "photo" + ext)
     photo.save(img_path)
 
-    # BYOK: the tester brings the PAID keys (Runpod render, Fish voice); Gemini
-    # (script) stays server-side. Keys are stored encrypted with the job (see
-    # jobs.enqueue) and wiped when it finishes. We require the key for whatever
-    # paid service the selection actually uses, and say so plainly here rather
-    # than letting the worker fail deep in the pipeline.
+    # Full BYOK: the tester brings every paid key -- Runpod (render), Fish
+    # (voice), and Gemini (script). Nothing of the operator's is used. Keys are
+    # stored encrypted with the job (see jobs.enqueue) and wiped when it
+    # finishes. We require the key for whatever the selection actually uses, and
+    # say so plainly here rather than letting the worker fail deep in the pipeline.
     engine_val = engine or "runpod"
     voice_engine_val = request.form.get("voice_engine", "").strip() or None
     runpod_key = request.form.get("runpod_key", "").strip() or None
     fish_key = request.form.get("fish_key", "").strip() or None
+    gemini_key = request.form.get("gemini_key", "").strip() or None
     wavespeed_key = request.form.get("wavespeed_key", "").strip() or None
     heygen_key = request.form.get("heygen_key", "").strip() or None
     elevenlabs_key = request.form.get("elevenlabs_key", "").strip() or None
 
+    # Gemini is only needed to WRITE a script from a topic. A pasted script skips
+    # the writer (metadata falls back gracefully), so the key is optional then.
+    if not own_script and not gemini_key:
+        return jsonify(error="Enter your Google Gemini API key so a script can be "
+                             "written from your topic (or paste your own script)."), 400
     if engine_val.startswith("runpod") and not runpod_key:
         return jsonify(error="Enter your Runpod API key to render the video."), 400
     if engine_val.startswith("wavespeed") and not wavespeed_key:
@@ -222,8 +228,9 @@ def generate():
         voice_speed=request.form.get("voice_speed", "").strip() or None,
         fish_personal_use=fish_personal_use,
         render_prompt=request.form.get("render_prompt", "").strip() or None,
-        keys={"runpod": runpod_key, "fish": fish_key, "wavespeed": wavespeed_key,
-              "heygen": heygen_key, "elevenlabs": elevenlabs_key},
+        keys={"runpod": runpod_key, "fish": fish_key, "gemini": gemini_key,
+              "wavespeed": wavespeed_key, "heygen": heygen_key,
+              "elevenlabs": elevenlabs_key},
     )
     return jsonify(job_id=job_id), 202
 

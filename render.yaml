@@ -11,19 +11,14 @@ services:
     # so they share the SQLite job database. (See start.sh for why one container.)
     startCommand: bash start.sh
     envVars:
-      # --- BYOK demo: testers bring their own paid keys ---
-      # Runpod (render) and Fish (voice) keys are entered per render by each
-      # tester, encrypted with their job, and wiped when it finishes. So do NOT
-      # set RUNPOD_API_KEY / FISH_API_KEY here -- leaving them unset is what
-      # forces BYOK. (If you ever want a shared fallback instead, add them back.)
+      # --- Full BYOK: testers bring ALL their own keys ---
+      # Runpod (render), Fish (voice) AND Gemini (script) keys are entered per
+      # render by each tester, encrypted with their job, and wiped when it
+      # finishes. So do NOT set RUNPOD_API_KEY / FISH_API_KEY / GEMINI_API_KEY
+      # here -- leaving them unset is what forces BYOK.
 
-      # Script generation stays server-side; Gemini's free tier is cheap and
-      # asking testers for a third key is friction. You provide this one.
-      - key: GEMINI_API_KEY
-        sync: false
-
-      # REQUIRED and STABLE: this key encrypts the testers' per-job keys. It must
-      # be set (not auto-generated) so the app and worker share it reliably.
+      # The ONLY key you set. It encrypts the testers' per-job keys, so it must
+      # be present and STABLE (not auto-generated) so the app and worker share it.
       # Generate one with:
       #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
       - key: HUB_VAULT_KEY

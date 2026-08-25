@@ -75,17 +75,19 @@ def _voice_kwargs(job):
     )
 
 
-def resolve_script(job):
+def resolve_script(job, keys):
     """Stage 1, 'writing the script'. Moved off the request path so POST returns
     instantly even when Gemini is slow, and so the UI can show this as its own
     step. Mirrors app.py's old inline logic: bring-your-own script skips the
-    writer and only gets metadata; a topic gets a full generation."""
+    writer and only gets metadata; a topic gets a full generation. Uses the
+    tester's Gemini key (BYOK)."""
     from generate import make_script, make_meta
+    gk = keys.get("gemini")
     own = (job.get("own_script") or "").strip()
     if own:
-        data = make_meta(own, job.get("prompt") or "")
+        data = make_meta(own, job.get("prompt") or "", api_key=gk)
     else:
-        data = make_script(job.get("prompt") or "")
+        data = make_script(job.get("prompt") or "", api_key=gk)
     jobs.set_meta(job["id"], data["script"], data.get("title", ""),
                   data.get("description", ""), data.get("tags", []))
     return data["script"]
@@ -183,7 +185,7 @@ def process(job):
         if job.get("script"):
             script = job["script"]
         else:
-            script = resolve_script(job)
+            script = resolve_script(job, keys)
 
         if (job["engine"] or "").startswith("runpod"):
             video_path, metrics = _run_runpod(job, script, keys)

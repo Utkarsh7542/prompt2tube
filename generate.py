@@ -25,18 +25,18 @@ Write YouTube metadata for it. Reply with only a JSON object in this exact shape
 The title must be under 90 characters. Give 3 to 6 tags."""
 
 
-def make_script(topic):
+def make_script(topic, api_key=None):
     text = INSTRUCTION.format(topic=topic)
-    return parse(ask_gemini(text), topic)
+    return parse(ask_gemini(text, api_key), topic)
 
 
-def make_meta(script, topic=""):
+def make_meta(script, topic="", api_key=None):
     """User brought their own script: only generate title/description/tags.
     Metadata is nice-to-have, so any failure falls back to something usable
     instead of blocking the render."""
     fallback_title = (topic or " ".join(script.split()[:8]))[:95]
     try:
-        data = parse(ask_gemini(META_INSTRUCTION.format(script=script)), fallback_title)
+        data = parse(ask_gemini(META_INSTRUCTION.format(script=script), api_key), fallback_title)
     except Exception:
         data = {"title": fallback_title, "description": "", "tags": []}
     data["script"] = script  # never let the model rewrite the user's words
@@ -45,8 +45,10 @@ def make_meta(script, topic=""):
     return data
 
 
-def ask_gemini(text):
-    key = os.environ.get("GEMINI_API_KEY")
+def ask_gemini(text, api_key=None):
+    # BYOK: use the caller's key if given (the tester's, passed from the job),
+    # otherwise fall back to the server env key (shared/local mode).
+    key = (api_key or "").strip() or os.environ.get("GEMINI_API_KEY")
     if not key:
         raise RuntimeError("GEMINI_API_KEY is not set")
     name = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
