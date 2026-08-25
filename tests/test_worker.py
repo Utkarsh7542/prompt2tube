@@ -19,6 +19,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from cryptography.fernet import Fernet
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import jobs  # noqa: E402
@@ -35,6 +37,10 @@ class Base(unittest.TestCase):
         self.db = os.path.join(self.tmp, "jobs.db")
         self.dbpatch = mock.patch.object(jobs, "DB_PATH", self.db)
         self.dbpatch.start()
+        self.envkey = mock.patch.dict(
+            os.environ, {"HUB_VAULT_KEY": Fernet.generate_key().decode()})
+        self.envkey.start()
+        jobs._cipher = None
         jobs.init_db()
         # Script generation calls Gemini; stub it everywhere so nothing hits the
         # network. The worker treats an already-set script as "resume", so most
@@ -45,14 +51,16 @@ class Base(unittest.TestCase):
 
     def tearDown(self):
         self.dbpatch.stop()
+        self.envkey.stop()
+        jobs._cipher = None
         self.script.stop()
 
-    def _enqueue(self, engine="runpod"):
+    def _enqueue(self, engine="runpod", keys=None):
         folder = os.path.join(self.tmp, "j")
         os.makedirs(folder, exist_ok=True)
         return jobs.enqueue(prompt="a topic", own_script=None, engine=engine,
                             folder=folder, img_path=os.path.join(folder, "p.jpg"),
-                            voice_engine="fish")
+                            voice_engine="fish", keys=keys)
 
 
 class TestHappyPath(Base):
@@ -127,6 +135,45 @@ class TestFailuresAreReported(Base):
         self.assertIn("Fish rejected", job["error"])
         # failed before submit, so no paid id was taken
         self.assertIsNone(job["runpod_job_id"])
+
+
+class TestBYOK(Base):
+    def test_worker_uses_the_testers_keys_then_wipes_them(self):
+        """The tester's Fish key reaches the voice call and their Runpod key
+        reaches the render, and both are wiped once the job finishes."""
+        jid = self._enqueue(keys={"runpod": "rp-x", "fish": "fish-x"})
+        seen = {}
+
+        def cap_say(text, path, **kw):
+            seen["fish"] = kw.get("fish_key")
+            return {"est_cost": 0.015}
+
+        def cap_prep(img, aud, folder, **kw):
+            seen["runpod"] = kw.get("request_key")
+            return ("rp-1", _PREP)
+
+        with mock.patch.object(worker.video, "say", side_effect=cap_say), \
+             mock.patch.object(worker.runpod, "prepare_and_submit", side_effect=cap_prep), \
+             mock.patch.object(worker.runpod, "resolve_key",
+                               side_effect=lambda k=None: k or "env"), \
+             mock.patch.object(worker.runpod, "collect",
+                               return_value=("https://x/a.mp4", 0.25, {})), \
+             mock.patch.object(worker.runpod, "download",
+                               side_effect=lambda u, o, j=None: o):
+            worker.run_once()
+
+        self.assertEqual(seen["fish"], "fish-x")     # their voice key
+        self.assertEqual(seen["runpod"], "rp-x")     # their render key
+        self.assertEqual(jobs.read_keys(jid), {})    # wiped on completion
+        self.assertEqual(jobs.get(jid)["status"], jobs.DONE)
+
+    def test_keys_are_wiped_even_when_the_render_fails(self):
+        jid = self._enqueue(keys={"runpod": "rp-x", "fish": "fish-x"})
+        with mock.patch.object(worker.video, "say",
+                               side_effect=RuntimeError("boom")):
+            worker.run_once()
+        self.assertEqual(jobs.get(jid)["status"], jobs.FAILED)
+        self.assertEqual(jobs.read_keys(jid), {})    # not left behind on failure
 
 
 class TestRestartSurvival(Base):

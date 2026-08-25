@@ -42,7 +42,47 @@ import sqlite3
 import time
 import uuid
 
+from cryptography.fernet import Fernet
+
 DB_PATH = os.environ.get("JOBS_DB", "jobs.db")
+
+# --- per-job key encryption (BYOK) --------------------------------------------
+#
+# Testers bring their own Runpod + Fish keys. Because the worker runs the render
+# LATER, in a different process, the keys have to be stored with the job -- but
+# never in plaintext. They are encrypted here on the way in, decrypted only
+# inside the worker for the one render, and wiped the moment the job reaches a
+# terminal state (see clear_keys / worker.process). This is a deliberate,
+# demo-scoped exception to "never persist a credential", narrowed by: encryption
+# at rest, a short lifetime (one render), and a hard wipe on completion.
+#
+# The key comes from the SAME source as hub/vault.py (HUB_VAULT_KEY env, else
+# .secrets/vault.key) so there is one vault key for the whole app. Loaded lazily
+# so importing jobs.py never requires the key to exist (tests, tooling).
+
+_VAULT_KEY_FILE = os.path.join(".secrets", "vault.key")
+_cipher = None
+
+
+def _vault_key():
+    env_key = os.environ.get("HUB_VAULT_KEY", "").strip()
+    if env_key:
+        return env_key.encode()
+    os.makedirs(".secrets", exist_ok=True)
+    if os.path.exists(_VAULT_KEY_FILE):
+        with open(_VAULT_KEY_FILE, "rb") as f:
+            return f.read().strip()
+    key = Fernet.generate_key()
+    with open(_VAULT_KEY_FILE, "wb") as f:
+        f.write(key)
+    return key
+
+
+def _fernet():
+    global _cipher
+    if _cipher is None:
+        _cipher = Fernet(_vault_key())
+    return _cipher
 
 # Status is the coarse lifecycle; stage is the fine-grained thing the UI shows.
 # Kept separate so the worker can move through stages without the web layer
@@ -109,6 +149,8 @@ def _db():
         error TEXT,
         metrics TEXT,                    -- JSON of the final metrics dict
         est_cost REAL,                   -- per-job cost, for the ledger (Phase 2)
+        keys_blob BLOB,                  -- BYOK: Fernet ciphertext of the tester's
+                                         -- keys, wiped when the job finishes
         created REAL NOT NULL,
         updated REAL NOT NULL)""")
     return conn
@@ -126,29 +168,63 @@ def _row(r):
     d = dict(r)
     d["tags"] = json.loads(d["tags"]) if d.get("tags") else []
     d["metrics"] = json.loads(d["metrics"]) if d.get("metrics") else None
+    # The ciphertext never leaves this module through the normal row accessor,
+    # so a stray get() or the /jobs API can never surface a tester's keys. The
+    # worker reads them only through read_keys(), which is explicit.
+    d.pop("keys_blob", None)
     return d
 
 
 def enqueue(prompt, own_script, engine, folder, img_path, user_id=None,
             voice_engine=None, voice_id=None, voice_model=None, voice_speed=None,
-            fish_personal_use=False, render_prompt=None):
+            fish_personal_use=False, render_prompt=None, keys=None):
     """Write a queued row and return its id. This is all POST /generate does with
     the render -- it never touches Runpod or Fish, so it returns in milliseconds
-    no matter how long the eventual render is."""
+    no matter how long the eventual render is.
+
+    `keys` is an optional dict of the tester's BYOK keys (e.g. {"runpod": ...,
+    "fish": ...}). It is encrypted before it touches the database; empty/None
+    means the worker falls back to server env keys (the shared-key mode)."""
     job_id = uuid.uuid4().hex[:10]
     now = time.time()
+    blob = None
+    real = {k: v for k, v in (keys or {}).items() if v}
+    if real:
+        blob = _fernet().encrypt(json.dumps(real).encode())
     with _db() as conn:
         conn.execute(
             """INSERT INTO jobs (id, user_id, status, stage, prompt, own_script,
                  engine, voice_engine, voice_id, voice_model, voice_speed,
-                 fish_personal_use, render_prompt, folder, img_path,
+                 fish_personal_use, render_prompt, folder, img_path, keys_blob,
                  created, updated)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (job_id, user_id, QUEUED, STAGE_QUEUED, prompt, own_script,
              engine, voice_engine, voice_id, voice_model, voice_speed,
-             1 if fish_personal_use else 0, render_prompt, folder, img_path,
+             1 if fish_personal_use else 0, render_prompt, folder, img_path, blob,
              now, now))
     return job_id
+
+
+def read_keys(job_id):
+    """Decrypt and return the tester's BYOK keys for one job, or {} if none.
+    The ONLY way keys leave this module; called by the worker at render time."""
+    with _db() as conn:
+        row = conn.execute("SELECT keys_blob FROM jobs WHERE id=?",
+                           (job_id,)).fetchone()
+    if not row or row["keys_blob"] is None:
+        return {}
+    try:
+        return json.loads(_fernet().decrypt(row["keys_blob"]).decode())
+    except Exception:
+        return {}  # unreadable (rotated key etc.) -> behave as no keys
+
+
+def clear_keys(job_id):
+    """Wipe the stored keys. Called when a job reaches a terminal state, so a
+    tester's credentials live only as long as their render."""
+    with _db() as conn:
+        conn.execute("UPDATE jobs SET keys_blob=NULL, updated=? WHERE id=?",
+                     (time.time(), job_id))
 
 
 def get(job_id):

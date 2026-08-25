@@ -9,11 +9,15 @@ production, where the thing at stake is a paid render, not a unit.
 Run: python -m unittest discover -s tests -v
 """
 
+import json
 import os
+import sqlite3
 import sys
 import tempfile
 import unittest
 from unittest import mock
+
+from cryptography.fernet import Fernet
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -26,10 +30,18 @@ class Base(unittest.TestCase):
         self.db = os.path.join(self.tmp, "jobs.db")
         self.patch = mock.patch.object(jobs, "DB_PATH", self.db)
         self.patch.start()
+        # Deterministic vault key for BYOK encryption; reset the cached cipher so
+        # it is picked up (the cache is process-global).
+        self.envkey = mock.patch.dict(
+            os.environ, {"HUB_VAULT_KEY": Fernet.generate_key().decode()})
+        self.envkey.start()
+        jobs._cipher = None
         jobs.init_db()
 
     def tearDown(self):
         self.patch.stop()
+        self.envkey.stop()
+        jobs._cipher = None
 
     def _enqueue(self, **kw):
         kw.setdefault("prompt", "walking is underrated")
@@ -142,6 +154,45 @@ class TestRecoverySupport(Base):
         self.assertEqual(job["stage"], jobs.STAGE_QUEUED)
         # and it can be claimed again
         self.assertEqual(jobs.claim_next()["id"], jid)
+
+
+class TestBYOKKeys(Base):
+    """Per-job keys: encrypted at rest, readable only by the worker, wiped on
+    completion, and never leaked through the ordinary row accessor."""
+
+    def test_keys_round_trip_but_never_leak_through_get(self):
+        jid = self._enqueue(keys={"runpod": "rp-secret", "fish": "fish-secret"})
+        # the worker can read them back
+        self.assertEqual(jobs.read_keys(jid),
+                         {"runpod": "rp-secret", "fish": "fish-secret"})
+        # but get() (what the /jobs API uses) never carries them
+        job = jobs.get(jid)
+        self.assertNotIn("keys_blob", job)
+        self.assertNotIn("rp-secret", json.dumps(job))
+
+    def test_keys_are_encrypted_at_rest(self):
+        jid = self._enqueue(keys={"runpod": "rp-secret"})
+        con = sqlite3.connect(self.db)
+        con.row_factory = sqlite3.Row
+        blob = con.execute("SELECT keys_blob FROM jobs WHERE id=?",
+                           (jid,)).fetchone()["keys_blob"]
+        con.close()
+        self.assertIsNotNone(blob)
+        # the plaintext must not appear in the stored bytes
+        self.assertNotIn(b"rp-secret", bytes(blob))
+
+    def test_clear_keys_wipes_them(self):
+        jid = self._enqueue(keys={"runpod": "rp-secret"})
+        jobs.clear_keys(jid)
+        self.assertEqual(jobs.read_keys(jid), {})
+
+    def test_no_keys_reads_as_empty(self):
+        self.assertEqual(jobs.read_keys(self._enqueue()), {})
+
+    def test_blank_keys_are_not_stored(self):
+        """Empty strings (a field left blank) must not create a ciphertext."""
+        jid = self._enqueue(keys={"runpod": "", "fish": None})
+        self.assertEqual(jobs.read_keys(jid), {})
 
 
 if __name__ == "__main__":

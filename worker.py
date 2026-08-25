@@ -91,8 +91,12 @@ def resolve_script(job):
     return data["script"]
 
 
-def _run_runpod(job, script):
-    """The resumable path. Returns (video_path, metrics)."""
+def _run_runpod(job, script, keys):
+    """The resumable path. Returns (video_path, metrics).
+
+    `keys` is the tester's decrypted BYOK dict. runpod.resolve_key(x) returns x
+    if given, else falls back to the server env key -- so this works in both BYOK
+    and shared-key mode, and raises a clear error if neither exists."""
     folder = job["folder"]
     engine = job["engine"]
     model = engine.split("runpod-", 1)[1] if engine.startswith("runpod-") else None
@@ -102,10 +106,11 @@ def _run_runpod(job, script):
     # the voice was made before the crash -- skip straight to collecting it.
     if job.get("runpod_job_id"):
         job_id = job["runpod_job_id"]
+        rp_key = runpod.resolve_key(keys.get("runpod"))
         prep = runpod.prep_from_row(model, job.get("duration_s"),
                                     job.get("predicted_wall_s"))
         started = time.time()
-        video_url, actual_cost, _ = runpod.collect(job_id, runpod.resolve_key())
+        video_url, actual_cost, _ = runpod.collect(job_id, rp_key)
         jobs.set_stage(job["id"], jobs.STAGE_FINALIZE)
         out = os.path.join(folder, "video.mp4")
         runpod.download(video_url, out, job_id)
@@ -115,14 +120,24 @@ def _run_runpod(job, script):
         return out, runpod.render_metrics(prep, job_id, actual_cost,
                                           time.time() - started)
 
-    # Fresh render.
+    # Fresh render. The voice uses the tester's Fish key; the render uses their
+    # Runpod key.
     jobs.set_stage(job["id"], jobs.STAGE_VOICE)
-    voice_metrics = video.say(script, voice, **_voice_kwargs(job)) or {}
+    voice_metrics = video.say(
+        script, voice, engine=job.get("voice_engine"),
+        voice_id=job.get("voice_id"), voice_model=job.get("voice_model"),
+        speed=job.get("voice_speed"), fish_key=keys.get("fish"),
+        elevenlabs_key=keys.get("elevenlabs"),
+        fish_personal_use=bool(job.get("fish_personal_use"))) or {}
 
     jobs.set_stage(job["id"], jobs.STAGE_RENDER)
+    # Resolve the render key here, after the voice stage, so a voice failure is
+    # reported as a voice failure. (In the real flow app.py has already required
+    # this key at submit time, so it is present.)
+    rp_key = runpod.resolve_key(keys.get("runpod"))
     job_id, prep = runpod.prepare_and_submit(
         job["img_path"], voice, folder, model=model,
-        prompt=job.get("render_prompt"))
+        request_key=rp_key, prompt=job.get("render_prompt"))
     # PERSIST BEFORE POLLING. This write is the crash boundary: everything after
     # it is recoverable, everything before it was free to redo.
     jobs.set_runpod_job_id(job["id"], job_id,
@@ -130,7 +145,7 @@ def _run_runpod(job, script):
                            duration_s=prep["duration"])
 
     started = time.time()
-    video_url, actual_cost, _ = runpod.collect(job_id, runpod.resolve_key())
+    video_url, actual_cost, _ = runpod.collect(job_id, rp_key)
     jobs.set_stage(job["id"], jobs.STAGE_FINALIZE)
     out = os.path.join(folder, "video.mp4")
     runpod.download(video_url, out, job_id)
@@ -141,32 +156,28 @@ def _run_runpod(job, script):
     return out, metrics
 
 
-def _run_other(job, script):
+def _run_other(job, script, keys):
     """Every non-runpod engine, run wholesale. Off the request path, but without
     the persist-and-resume machinery those engines do not need. make_video()
-    regenerates the voice itself, so nothing is generated twice here."""
+    regenerates the voice itself, so nothing is generated twice here. BYOK keys
+    are threaded through so these WIP engines also use the tester's account."""
     jobs.set_stage(job["id"], jobs.STAGE_RENDER)
     video_path, _engine, metrics = video.make_video(
         job["img_path"], script, job["folder"], engine=job["engine"],
-        **_voice_kwargs_for_make_video(job))
-    return video_path, metrics
-
-
-def _voice_kwargs_for_make_video(job):
-    # make_video takes voice_* under slightly different names than say().
-    return dict(
-        voice_engine=job.get("voice_engine"),
-        voice_id=job.get("voice_id"),
-        voice_model=job.get("voice_model"),
-        voice_speed=job.get("voice_speed"),
+        voice_engine=job.get("voice_engine"), voice_id=job.get("voice_id"),
+        voice_model=job.get("voice_model"), voice_speed=job.get("voice_speed"),
         fish_personal_use=bool(job.get("fish_personal_use")),
-    )
+        runpod_key=keys.get("runpod"), fish_key=keys.get("fish"),
+        wavespeed_key=keys.get("wavespeed"), heygen_key=keys.get("heygen"),
+        elevenlabs_key=keys.get("elevenlabs"))
+    return video_path, metrics
 
 
 def process(job):
     """Run one claimed job to a terminal state. Any exception is caught and
     recorded as a failure with its reason -- never swallowed, never turned into a
     lesser result."""
+    keys = jobs.read_keys(job["id"])  # tester's BYOK keys, or {} in shared mode
     try:
         # A resumed job already has its script; only a fresh one writes it.
         if job.get("script"):
@@ -175,13 +186,18 @@ def process(job):
             script = resolve_script(job)
 
         if (job["engine"] or "").startswith("runpod"):
-            video_path, metrics = _run_runpod(job, script)
+            video_path, metrics = _run_runpod(job, script, keys)
         else:
-            video_path, metrics = _run_other(job, script)
+            video_path, metrics = _run_other(job, script, keys)
 
         jobs.mark_done(job["id"], video_path, metrics)
     except Exception as e:  # noqa: BLE001 -- a worker must not die on one bad job
         jobs.mark_failed(job["id"], "Render failed: {}".format(e))
+    finally:
+        # The tester's keys live only as long as their render. Wiped whether it
+        # succeeded or failed. (Interrupted jobs never reach process(); recover()
+        # requeues the unpaid ones with their keys intact.)
+        jobs.clear_keys(job["id"])
 
 
 def recover():

@@ -184,26 +184,46 @@ def generate():
     img_path = os.path.join(folder, "photo" + ext)
     photo.save(img_path)
 
-    # NOTE ON KEYS: BYOK keys are intentionally NOT read from the form here. An
-    # async job would have to persist them to run later, and a live key in the
-    # jobs DB breaks both the vault rule and the product's "no API keys in the
-    # user panel" rule. The worker resolves keys from the server environment;
-    # BYOK moves to the admin panel in Phase 2. The key <input>s in the current
-    # form are therefore no-ops on this path -- flagged, to be removed with the
-    # Phase 1 product UI, not silently half-wired.
+    # BYOK: the tester brings the PAID keys (Runpod render, Fish voice); Gemini
+    # (script) stays server-side. Keys are stored encrypted with the job (see
+    # jobs.enqueue) and wiped when it finishes. We require the key for whatever
+    # paid service the selection actually uses, and say so plainly here rather
+    # than letting the worker fail deep in the pipeline.
+    engine_val = engine or "runpod"
+    voice_engine_val = request.form.get("voice_engine", "").strip() or None
+    runpod_key = request.form.get("runpod_key", "").strip() or None
+    fish_key = request.form.get("fish_key", "").strip() or None
+    wavespeed_key = request.form.get("wavespeed_key", "").strip() or None
+    heygen_key = request.form.get("heygen_key", "").strip() or None
+    elevenlabs_key = request.form.get("elevenlabs_key", "").strip() or None
+
+    if engine_val.startswith("runpod") and not runpod_key:
+        return jsonify(error="Enter your Runpod API key to render the video."), 400
+    if engine_val.startswith("wavespeed") and not wavespeed_key:
+        return jsonify(error="Enter your WaveSpeed API key for that renderer."), 400
+    if engine_val == "heygen" and not heygen_key:
+        return jsonify(error="Enter your HeyGen API key for that renderer."), 400
+    # HeyGen does its own speech, so it needs no voice key.
+    if voice_engine_val == "fish" and engine_val != "heygen" and not fish_key:
+        return jsonify(error="Enter your Fish Audio API key for the voice."), 400
+    if voice_engine_val == "elevenlabs" and engine_val != "heygen" and not elevenlabs_key:
+        return jsonify(error="Enter your ElevenLabs API key for the voice."), 400
+
     fish_personal_use = request.form.get("fish_personal_use", "").strip() in ("1", "true", "on")
     job_id = jobs.enqueue(
         prompt=prompt or None,
         own_script=own_script or None,
-        engine=engine or "runpod",
+        engine=engine_val,
         folder=folder,
         img_path=img_path,
-        voice_engine=request.form.get("voice_engine", "").strip() or None,
+        voice_engine=voice_engine_val,
         voice_id=request.form.get("voice_id", "").strip() or None,
         voice_model=request.form.get("voice_model", "").strip() or None,
         voice_speed=request.form.get("voice_speed", "").strip() or None,
         fish_personal_use=fish_personal_use,
         render_prompt=request.form.get("render_prompt", "").strip() or None,
+        keys={"runpod": runpod_key, "fish": fish_key, "wavespeed": wavespeed_key,
+              "heygen": heygen_key, "elevenlabs": elevenlabs_key},
     )
     return jsonify(job_id=job_id), 202
 

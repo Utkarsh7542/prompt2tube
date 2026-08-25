@@ -11,31 +11,28 @@ services:
     # so they share the SQLite job database. (See start.sh for why one container.)
     startCommand: bash start.sh
     envVars:
-      # --- shared demo keys: set these once in the Render dashboard ---
-      # With these set, testers open the link and generate videos WITHOUT
-      # entering any keys. Cost goes to whichever account these belong to.
-      - key: RUNPOD_API_KEY
+      # --- BYOK demo: testers bring their own paid keys ---
+      # Runpod (render) and Fish (voice) keys are entered per render by each
+      # tester, encrypted with their job, and wiped when it finishes. So do NOT
+      # set RUNPOD_API_KEY / FISH_API_KEY here -- leaving them unset is what
+      # forces BYOK. (If you ever want a shared fallback instead, add them back.)
+
+      # Script generation stays server-side; Gemini's free tier is cheap and
+      # asking testers for a third key is friction. You provide this one.
+      - key: GEMINI_API_KEY
         sync: false
-      - key: FISH_API_KEY
-        sync: false
-      - key: GEMINI_API_KEY        # writes the script from a topic
+
+      # REQUIRED and STABLE: this key encrypts the testers' per-job keys. It must
+      # be set (not auto-generated) so the app and worker share it reliably.
+      # Generate one with:
+      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      - key: HUB_VAULT_KEY
         sync: false
 
       # --- optional ---
       - key: HF_TOKEN              # only for the free HuggingFace renderer
         sync: false
-      # Publishing (YouTube/LinkedIn) needs these AND a persistent store for the
-      # token vault. On the free tier hub.db is ephemeral, so connected accounts
-      # do not survive a redeploy -- treat publishing as not-yet-durable here.
-      - key: HUB_VAULT_KEY
-        sync: false
-      - key: HUB_REDIRECT_BASE
-        sync: false
-      - key: WAVESPEED_API_KEY
-        sync: false
-      - key: HEYGEN_API_KEY
-        sync: false
-      - key: ELEVENLABS_API_KEY
+      - key: HUB_REDIRECT_BASE    # only if you enable publishing
         sync: false
 
       - key: PYTHON_VERSION

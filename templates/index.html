@@ -174,10 +174,13 @@
     background: var(--bg);
   }
   .keybox label { font-size: 0.8125rem; }
-  /* Shared-key demo: API keys are configured on the server, so the paste-a-key
-     inputs and their labels are hidden. The informational hints (pricing,
-     privacy) stay, because they are still true and useful. */
+  /* BYOK demo: testers bring their own paid keys. Hide the key inputs for the
+     WIP engines (WaveSpeed/HeyGen/ElevenLabs), but SHOW the two that the demo
+     stack actually uses -- Runpod (render) and Fish (voice). Informational hints
+     stay in every box. */
   .keybox input[type="password"], .keybox label[for$="_key"] { display: none; }
+  .keybox #runpod_key, .keybox #fish_key,
+  .keybox label[for="runpod_key"], .keybox label[for="fish_key"] { display: block; }
 
   /* ---------- buttons & status ---------- */
   button.primary {
@@ -402,7 +405,7 @@
       <div id="runpodBox" class="keybox" style="display:none">
         <label for="runpod_key">Runpod API key</label>
         <input type="password" id="runpod_key" name="runpod_key" autocomplete="off"
-               placeholder="paste your key (used per request, never stored)">
+               placeholder="paste your Runpod key — encrypted for this render, deleted when it finishes">
         <p class="hint">FLAT price per video, not per second: 480p $0.25, 720p $0.50, whatever the length. Measured 2026-08-06 at 4s, 25s, 98s and 5 minutes — the charge never moved.</p>
         <p class="hint">Photo and voice are sent inline in the request, so neither is stored on anyone's CDN. The finished video sits on a Runpod URL for 7 days.</p>
         <p class="hint">Renders while the browser waits, roughly 5.6s of compute per second of video, so the app caps this at ~340 words. Longer needs the render moved off the request.</p>
@@ -432,7 +435,7 @@
       <div id="fishBox" class="keybox" style="display:none">
         <label for="fish_key">Fish Audio API key</label>
         <input type="password" id="fish_key" name="fish_key" autocomplete="off"
-               placeholder="paste your key (used per request, never stored)">
+               placeholder="paste your Fish key — encrypted for this render, deleted when it finishes">
         <p class="hint">$15 per million UTF-8 BYTES, pay as you go, no subscription. About $0.015 for a 60 second script and $0.15 for ten minutes, against $0.18 and $1.80 on ElevenLabs Creator.</p>
         <p class="hint">Billed on bytes, not characters, so accented or non-Latin scripts cost 2 to 4 times their character count.</p>
         <p class="hint">Their free model is licensed for personal, non-commercial use only, so it is not selectable here. Their terms also allow them to train on submitted content.</p>
