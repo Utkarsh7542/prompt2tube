@@ -1,6 +1,12 @@
-"""Prints token.json as one line, ready to paste into the GOOGLE_TOKEN_JSON env var on Render.
+"""DEPRECATED 2026-07-28. Nothing reads GOOGLE_TOKEN_JSON any more.
 
-Run locally AFTER you've uploaded to YouTube at least once (so token.json exists):
+This flattened token.json into one line for Render's GOOGLE_TOKEN_JSON env var,
+which fed v1's yt.py — a plaintext YouTube refresh token in an environment
+variable. Uploads now go through the hub's encrypted vault instead, so this
+script's output has nowhere to go. Kept only so the history of the old deploy
+path is legible; delete once yt.py goes.
+
+Original usage (no longer useful):
     python print_token.py
 """
 import json

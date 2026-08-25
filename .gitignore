@@ -1,24 +1,48 @@
+# --- secrets: NEVER ship these ---
+.env
+.secrets/
+client_secret.json
+*.key
+
+# --- runtime state / databases ---
+*.db
+*.db-wal
+*.db-shm
+static/jobs/
+static/*-cache/
+static/tts-cache/
+static/fish-cache/
+static/*.jsonl
+static/*.json
+
+# --- python caches ---
 __pycache__/
 *.pyc
-client_secret.json
-token.json
-static/jobs/
-static/heygen_cache.json
-static/wavespeed_cache.json
-static/wavespeed-receipts.jsonl
+.pytest_cache/
 
-# Internal working notes. These are written for me, not for a reader of this
-# repo, and they live in the Second Brain vault instead. Keeping them out means
-# a stranger reading the code is not handed my study notes and my answers to
-# my seniors' objections.
+# --- internal docs, reports, scratch (not for deploy) ---
+internship-report-content.md
+*.docx
 SENIOR_BRIEF.md
-CODE_TOUR.md
 PRD.md
 PRODUCT.md
-_git_split/
-finish_commits.bat
-.env
-venv/
-SadTalker/
-.secrets/
-hub.db
+PRODUCT-PLAN*.md
+STATUS.md
+CODE_TOUR.md
+renderer-notes.md
+topic.txt
+
+# --- dev tools & probes ---
+probe_out/
+probe_prompt.py
+probe_runpod.py
+fetch_runpod_job.py
+print_token.py
+
+# --- notebooks ---
+kaggle/
+runpod/
+*.ipynb
+
+# --- legacy (superseded by hub/) ---
+yt.py

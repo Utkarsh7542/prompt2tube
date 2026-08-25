@@ -27,10 +27,16 @@ def _resp(status=200, payload=None):
     return r
 
 
-def _write_stub(text, path):
-    """Stand-in for say(): make a file, close it, no TTS engine involved."""
+def _write_stub(text, path, **kwargs):
+    """Stand-in for say(): make a file, close it, no TTS engine involved.
+
+    **kwargs absorbs the voice-engine arguments say() gained on 2026-07-31
+    (engine, key, voice_id, model, speed). These tests are about the renderer,
+    so they neither set nor care about them -- but the stub has to accept the
+    real signature or it stops being a stand-in."""
     with open(path, "wb") as f:
         f.write(b"x")
+    return {}
 
 
 class FakeAPI:

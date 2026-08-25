@@ -4,22 +4,39 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    # Rendering is synchronous, so the request timeout is also the maximum
-    # render time. Must stay ABOVE wavespeed.POLL_MAX_S (840s) so the adapter
-    # gives up first and can report a reason plus a recoverable prediction id.
-    startCommand: gunicorn --workers 1 --timeout 900 --bind 0.0.0.0:$PORT app:app
+    # Rendering is now ASYNC. POST /generate enqueues a job and returns
+    # immediately; a background worker does the render (minutes to an hour) and
+    # the browser polls /jobs/<id>. So the web request no longer needs a giant
+    # timeout. start.sh runs the web server AND the worker in this one container
+    # so they share the SQLite job database. (See start.sh for why one container.)
+    startCommand: bash start.sh
     envVars:
-      - key: GEMINI_API_KEY
+      # --- shared demo keys: set these once in the Render dashboard ---
+      # With these set, testers open the link and generate videos WITHOUT
+      # entering any keys. Cost goes to whichever account these belong to.
+      - key: RUNPOD_API_KEY
         sync: false
-      - key: HF_TOKEN
+      - key: FISH_API_KEY
         sync: false
-      - key: GOOGLE_TOKEN_JSON
+      - key: GEMINI_API_KEY        # writes the script from a topic
         sync: false
-      # Paid renderers. Without these the hosted deploy can only use a key
-      # pasted into the form per request.
+
+      # --- optional ---
+      - key: HF_TOKEN              # only for the free HuggingFace renderer
+        sync: false
+      # Publishing (YouTube/LinkedIn) needs these AND a persistent store for the
+      # token vault. On the free tier hub.db is ephemeral, so connected accounts
+      # do not survive a redeploy -- treat publishing as not-yet-durable here.
+      - key: HUB_VAULT_KEY
+        sync: false
+      - key: HUB_REDIRECT_BASE
+        sync: false
       - key: WAVESPEED_API_KEY
         sync: false
       - key: HEYGEN_API_KEY
         sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+
       - key: PYTHON_VERSION
-        value: 3.12.6
+        value: "3.12.6"

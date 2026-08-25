@@ -75,8 +75,14 @@ What to copy: this folder, minus `__pycache__/` and `static/jobs/`. The three cr
 The repo includes `render.yaml`. Steps:
 
 1. Push to GitHub, then on https://render.com: New > Blueprint > pick the repo. It reads `render.yaml` automatically.
-2. Set three env vars when prompted: `GEMINI_API_KEY`, `HF_TOKEN`, and `GOOGLE_TOKEN_JSON` — get the last one by running `python print_token.py` locally (needs a `token.json` from one successful local upload) and pasting the single-line output.
-3. Deploy. First load after 15 idle minutes takes ~1 minute (free tier wakes from sleep).
+2. Set `GEMINI_API_KEY` and `HF_TOKEN`, plus `WAVESPEED_API_KEY` / `HEYGEN_API_KEY` if you want the paid renderers server-side rather than pasted per request.
+3. Set `HUB_VAULT_KEY` to a generated Fernet key (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`). Without it the vault generates a throwaway key on each boot and every connected account becomes unreadable on restart.
+4. Set `HUB_REDIRECT_BASE` to the service's public HTTPS URL, and add `<that URL>/hub/callback/youtube` and `/hub/callback/linkedin` to the respective developer apps' allowed redirect URIs.
+5. Deploy. First load after 15 idle minutes takes ~1 minute (free tier wakes from sleep).
+
+**Known limitation on the free tier:** connected accounts live in `hub.db` on local disk, and Render's free instances have ephemeral filesystems — the file is wiped on redeploy and on wake-from-sleep. So social connections do not survive there. Fixing it properly means a persistent disk or an external database; until then, treat the hosted deploy as render-and-download only and publish from a local run.
+
+*(Superseded 2026-07-28: this section previously told you to set `GOOGLE_TOKEN_JSON` from `python print_token.py`. That fed v1's `yt.py`, which stored a YouTube refresh token in plaintext. Uploads now go through the hub's encrypted vault instead, and nothing reads `GOOGLE_TOKEN_JSON` any more.)*
 
 Server notes: uploads go to the channel that owns the token. The `motion` renderer is slow on the free 0.1-CPU instance because ffmpeg runs locally; the lip-sync paths are unaffected, since rendering happens on Hugging Face's or WaveSpeed's GPUs. Rendering is synchronous, so the gunicorn timeout (900s) is also the maximum render time — long videos need the render moved off the request path.
 
